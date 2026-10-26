@@ -8,6 +8,7 @@ from pathlib import Path
 from xnebula import __version__, profiles, settings_cli
 from xnebula.core import CATALOG, build_plan, selected_apps
 from xnebula.journal import Journal
+from xnebula.menu import run_menu
 from xnebula.windows import BackendError, WindowsBackend
 
 
@@ -21,6 +22,7 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command")
     settings_cli.add_commands(commands)
     profiles.add_commands(commands)
+    commands.add_parser("menu", help="Open the guided terminal menu.")
     commands.add_parser("catalog", help="List supported app IDs and removal effects.")
     commands.add_parser(
         "scan", help="Scan installed and provisioned apps (administrator required)."
@@ -47,6 +49,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None, *, backend=None, registry=None) -> int:
     arguments = parser()
     args = arguments.parse_args(argv)
+    if args.command == "menu" or (args.command is None and sys.stdin.isatty()):
+        return run_menu(lambda command: main(command, backend=backend, registry=registry))
     if args.command is None:
         arguments.print_help()
         return 0

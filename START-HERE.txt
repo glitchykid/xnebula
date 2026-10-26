@@ -1,0 +1,25 @@
+XNebula for Windows 11 x64
+
+1. Extract the entire ZIP to a folder you can write to (for example Documents).
+2. Double-click Start-XNebula.cmd to open the terminal menu.
+3. For system-wide scans or changes, use Start-XNebula-Admin.cmd and accept
+   Windows' administrator prompt. Opening the app does not apply changes.
+
+Python is included. No Python installation, pip, Git, or network connection
+is needed to start the portable release. Keep all extracted files together.
+
+Choose a menu number, review the preview, and type APPLY only when ready.
+Enter returns from a preview; 0 exits the menu.
+
+PowerShell commands also work:
+  .\Start-XNebula.cmd --help
+  .\Start-XNebula.cmd privacy list
+  .\Start-XNebula-Admin.cmd scan
+
+Backups and reports are in .xnebula\logs inside the extracted XNebula folder.
+See README.md for restoration, Windows edition restrictions, and limitations.
+
+Update: extract a newer ZIP into a new folder. Keep the old .xnebula folder
+and any saved profiles; copy them to the new folder if you want to use them.
+Uninstall: remove the extracted app folder after keeping any backups you need.
+Removing the app folder does not undo Windows settings already applied.

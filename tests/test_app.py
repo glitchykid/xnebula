@@ -81,6 +81,7 @@ class CliTests(unittest.TestCase):
         with (
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(output),
+            patch("sys.stdin.isatty", return_value=False),
             patch("builtins.input", return_value=answer),
         ):
             code = main(args, backend=backend or FakeBackend())
