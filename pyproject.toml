@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xnebula"
+version = "0.1.0"
+description = "Preview Windows debloating, privacy, startup, and cleanup changes from PowerShell"
+readme = "README.md"
+requires-python = ">=3.15"
+dependencies = []
+
+[project.scripts]
+xnebula = "xnebula.cli:main"
+
+[project.optional-dependencies]
+dev = ["ruff==0.17.2", "coverage==7.17.0", "build==1.6.1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xnebula"]
+
+[tool.ruff]
+target-version = "py315"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.coverage.run]
+source = ["xnebula"]
+branch = true
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
