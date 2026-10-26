@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xnebula"
-version = "0.2.0"
+version = "0.2.1"
 description = "Preview Windows debloating, privacy, startup, and cleanup changes from PowerShell"
 readme = "README.md"
 requires-python = ">=3.15"

@@ -11,6 +11,11 @@ is needed to start the portable release. Keep all extracted files together.
 Choose a menu number, review the preview, and type APPLY only when ready.
 Enter returns from a preview; 0 exits the menu.
 
+To uninstall apps, choose menu option 2, then select app numbers such as
+1 3 5, 1,3,5, or 2-4. Choose 9 (Select All) to select every supported app.
+Review the selected names and removal preview before typing APPLY.
+At the app picker, 0 or Enter cancels; invalid numbers let you try again.
+
 PowerShell commands also work:
   .\Start-XNebula.cmd --help
   .\Start-XNebula.cmd privacy list

@@ -54,6 +54,13 @@ class PortableLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Choose a number", result.stdout)
 
+    def test_portable_removal_picker_shows_numbers_select_all_and_retry(self):
+        result = self.run_launcher([], input="2\n999\n0\n0\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("1  Microsoft News", result.stdout)
+        self.assertIn("9  Select All", result.stdout)
+        self.assertIn("Invalid selection", result.stdout)
+
     def test_batch_launcher_works_from_another_directory_with_special_characters(self):
         launcher = self.app / "Start-XNebula.cmd"
         command = f'"{os.environ["COMSPEC"]}" /d /s /c ""{launcher}" --version"'

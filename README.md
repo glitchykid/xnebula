@@ -14,7 +14,7 @@ A Python terminal app for Windows 11, operated from PowerShell. Preview and remo
 
 ## Download, extract, and start
 
-1. Download **[xnebula-0.2.0-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.2.0/xnebula-0.2.0-windows-x64.zip)** from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+1. Download **[xnebula-0.2.1-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.2.1/xnebula-0.2.1-windows-x64.zip)** from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
 2. Right-click the ZIP, choose **Extract All**, and keep the complete folder somewhere writable, such as Documents.
 3. Open the extracted `XNebula` folder and double-click **`Start-XNebula.cmd`**. A numbered terminal menu opens in Windows PowerShell.
 4. For system-wide scans and changes, open **`Start-XNebula-Admin.cmd`** and accept Windows' administrator prompt. Opening either launcher does not apply changes.
@@ -33,9 +33,13 @@ The standard launcher does not request elevation. Use the administrator launcher
 
 For updates, extract the new release into a **new folder**, retain the old `.xnebula` backups and saved profiles, and copy them across if needed. To uninstall the app, retain required backups and remove its extracted folder; this does not undo Windows changes. Use `restore` first when you want to revert settings.
 
-Source checkouts do not include the runtime. Developers can install the app into `.venv` using the development commands below; the same launchers will use that environment. A wheel remains available for existing Python installations: `python -m pip install .\xnebula-0.2.0-py3-none-any.whl`.
+Source checkouts do not include the runtime. Developers can install the app into `.venv` using the development commands below; the same launchers will use that environment. A wheel remains available for existing Python installations: `python -m pip install .\xnebula-0.2.1-py3-none-any.whl`.
 
 ## App removal
+
+In the terminal menu, choose **2 — Remove selected apps**. Apps appear with numbers and their removal effects. Enter `1 3 5`, `1,3,5`, or a range such as `2-4`. Choose **9 — Select All** (or type `all`) to select all eight supported apps. `0` or an empty entry returns to the main menu. Invalid entries let you retry without reopening the picker. The selected app names appear before the removal preview; type `APPLY` only after reviewing it. Apps absent from the machine are skipped.
+
+CLI commands continue to accept app IDs:
 
 ```powershell
 .\Start-XNebula.cmd catalog
@@ -167,4 +171,4 @@ START-HERE.txt     Portable quick-start instructions
 pyproject.toml     package metadata, dev dependencies, lint/coverage configuration
 ```
 
-There are no graphical assets or GUI. Repository guidelines remain in `AGENTS.md` unchanged. See the [wiki home](docs/wiki/Home.md), [policy reference](docs/wiki/Policies.md), and [release notes](docs/releases/v0.2.0.md).
+There are no graphical assets or GUI. Repository guidelines remain in `AGENTS.md` unchanged. See the [wiki home](docs/wiki/Home.md), [policy reference](docs/wiki/Policies.md), and [release notes](docs/releases/v0.2.1.md).
