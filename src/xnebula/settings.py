@@ -23,6 +23,11 @@ class Target:
     name: str
 
 
+ANIMATION_TASKBAR = Target(
+    "HKCU", r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarAnimations"
+)
+
+
 @dataclass(frozen=True)
 class RegistryValue:
     type: int
@@ -61,7 +66,7 @@ SETTINGS = {
         "DataCollection",
         "AllowTelemetry",
         1,
-        "Limit Windows diagnostics to required data; preserve an existing zero.",
+        "Reduce diagnostics: off on supported Enterprise/Education; required only on Pro.",
     ),
     "tailored": setting(
         "privacy",
@@ -113,55 +118,79 @@ SETTINGS = {
         "Disable Windows location for all accounts; location-dependent features stop working.",
     ),
     "recall-snapshots": setting(
-        "recall",
+        "privacy",
         "WindowsAI",
         "DisableAIDataAnalysis",
         1,
         "Disable Recall snapshots. Windows deletes existing snapshots; backup cannot restore them.",
     ),
-    "storage-downloads": setting(
-        "storage",
-        "StorageSense",
-        "ConfigStorageSenseDownloadsCleanupThreshold",
-        0,
-        "Downloads cleanup: 0 keeps files; positive values set unused days before deletion.",
-    ),
-    "storage-recycle": setting(
-        "storage",
-        "StorageSense",
-        "ConfigStorageSenseRecycleBinCleanupThreshold",
-        0,
-        "Recycle Bin cleanup: 0 keeps items; a positive value permanently deletes older items.",
-    ),
-    "storage-cloud": setting(
-        "storage",
-        "StorageSense",
-        "ConfigStorageSenseCloudContentDehydrationThreshold",
-        0,
-        "Keep cloud-backed files available locally.",
-    ),
-    "storage-temporary": setting(
-        "storage",
-        "StorageSense",
-        "AllowStorageSenseTemporaryFilesCleanup",
-        1,
-        "Allow Windows to clean unused temporary files.",
-    ),
-    "storage-cadence": setting(
-        "storage",
-        "StorageSense",
-        "ConfigStorageSenseGlobalCadence",
-        0,
-        "Run Storage Sense when disk space is low.",
-    ),
-    "storage-enable": setting(
-        "storage",
-        "StorageSense",
-        "AllowStorageSenseGlobal",
-        1,
-        "Enable Storage Sense; scheduled cleanup is not an immediate disk cleanup.",
-    ),
 }
+PERMISSIONS = (
+    ("camera", "LetAppsAccessCamera", "Blocks packaged apps from using the camera."),
+    (
+        "microphone",
+        "LetAppsAccessMicrophone",
+        "Blocks packaged-app microphone access; calls and recording can stop working.",
+    ),
+    ("contacts", "LetAppsAccessContacts", "Blocks packaged-app access to contacts."),
+    ("calendar", "LetAppsAccessCalendar", "Blocks packaged-app access to calendars."),
+    ("email", "LetAppsAccessEmail", "Blocks packaged-app access to email."),
+    ("call-history", "LetAppsAccessCallHistory", "Blocks packaged-app access to call history."),
+    ("messaging", "LetAppsAccessMessaging", "Blocks packaged-app messaging access."),
+    ("tasks", "LetAppsAccessTasks", "Blocks packaged-app access to tasks."),
+    (
+        "account-info",
+        "LetAppsAccessAccountInfo",
+        "Blocks packaged-app access to account information.",
+    ),
+    (
+        "app-diagnostics",
+        "LetAppsGetDiagnosticInfo",
+        "Blocks apps from reading other apps' diagnostic information.",
+    ),
+    (
+        "background-apps",
+        "LetAppsRunInBackground",
+        "Stops packaged-app background activity; notifications and syncing can stop.",
+    ),
+)
+SETTINGS.update(
+    {key: setting("privacy", "AppPrivacy", name, 2, effect) for key, name, effect in PERMISSIONS}
+)
+SETTINGS["online-speech"] = Setting(
+    "privacy",
+    Target(
+        "HKLM", r"Software\Policies\Microsoft\InputPersonalization", "AllowInputPersonalization"
+    ),
+    0,
+    "Disables online speech recognition.",
+)
+SETTINGS["clipboard-sync"] = setting(
+    "privacy",
+    "System",
+    "AllowCrossDeviceClipboard",
+    0,
+    "Disables clipboard synchronization between devices.",
+)
+PERMISSION_EXCEPTIONS = {
+    Target("HKLM", POLICY + r"\AppPrivacy", name + suffix)
+    for _, name, _ in PERMISSIONS
+    for suffix in ("_ForceAllowTheseApps", "_UserInControlOfTheseApps")
+}
+
+# Retain validation of old backups without exposing removed features in the app.
+LEGACY_STORAGE_TARGETS = {
+    Target("HKLM", POLICY + r"\StorageSense", name)
+    for name in (
+        "AllowStorageSenseGlobal",
+        "AllowStorageSenseTemporaryFilesCleanup",
+        "ConfigStorageSenseGlobalCadence",
+        "ConfigStorageSenseDownloadsCleanupThreshold",
+        "ConfigStorageSenseRecycleBinCleanupThreshold",
+        "ConfigStorageSenseCloudContentDehydrationThreshold",
+    )
+}
+
 BACKGROUND = {
     name: Target("HKLM", POLICY + r"\AppPrivacy", "LetAppsRunInBackground" + suffix)
     for name, suffix in (
@@ -185,11 +214,7 @@ def supports_policies(edition):
     return edition.startswith(("Professional", "Enterprise", "Education", "IoTEnterprise"))
 
 
-def plan_settings(group, ids, registry, *, downloads_days=0, recycle_days=0):
-    if any(
-        type(days) is not int or not 0 <= days <= 365 for days in (downloads_days, recycle_days)
-    ):
-        raise ValueError("Retention must be between 0 (never delete) and 365 days.")
+def plan_settings(group, ids, registry):
     available = {key: value for key, value in SETTINGS.items() if value.group == group}
     if ids == ["all"]:
         ids = list(available)
@@ -202,7 +227,7 @@ def plan_settings(group, ids, registry, *, downloads_days=0, recycle_days=0):
         if not supports_policies(registry.edition) or (option.enterprise_only and not enterprise):
             skipped.append(f"{key}: unsupported edition {registry.edition}")
             continue
-        if group == "recall" and not registry.recall_available:
+        if key == "recall-snapshots" and not registry.recall_available:
             skipped.append(f"{key}: Recall feature or required Windows update is unavailable")
             continue
         before = registry.read(option.target)
@@ -210,59 +235,34 @@ def plan_settings(group, ids, registry, *, downloads_days=0, recycle_days=0):
             raise ValueError(f"{key} has an unexpected registry type; refusing to replace it.")
         if key == "diagnostics" and before == RegistryValue(4, 0):
             continue
-        desired = {"storage-downloads": downloads_days, "storage-recycle": recycle_days}.get(
-            key, option.desired
-        )
+        desired = 0 if key == "diagnostics" and enterprise else option.desired
         after = RegistryValue(4, desired)
         if before != after:
             changes.append(Change(option.target, before, after, key))
+        if any(permission_id == key for permission_id, _, _ in PERMISSIONS):
+            for suffix in ("_ForceAllowTheseApps", "_UserInControlOfTheseApps"):
+                target = Target(option.target.hive, option.target.key, option.target.name + suffix)
+                exceptions = registry.read(target)
+                if exceptions is not None:
+                    if exceptions.type != 7:
+                        raise ValueError(
+                            f"Unexpected {key} exception-list type; no changes started."
+                        )
+                    if exceptions.data:
+                        changes.append(
+                            Change(target, exceptions, RegistryValue(7, []), key + " exceptions")
+                        )
     return changes, skipped
 
 
-def plan_startup(ids, registry):
-    entries = registry.startup()
-    if not ids or any(key not in entries for key in ids):
-        raise ValueError("Choose exact scoped IDs from 'startup list'.")
-    changes = []
-    for key in dict.fromkeys(ids):
-        before = registry.read(entries[key])
-        if before is None or before.type not in (1, 2):
-            raise ValueError(f"Startup entry {key} changed or has an unsupported value type.")
-        changes.append(Change(entries[key], before, None, key))
-    return changes
-
-
-def plan_background(families, registry):
-    if not supports_policies(registry.edition):
-        raise ValueError(f"Background policies are unsupported on {registry.edition}.")
-    available = registry.background_apps()
-    if not families or any(family not in available for family in families):
-        raise ValueError("Choose exact package family names from 'background list'.")
-    changes = []
-    for name, target in BACKGROUND.items():
-        before = registry.read(target)
-        if name == "default":
-            if before is not None and before.type != 4:
-                raise ValueError("Unexpected background policy type.")
-            after = before or RegistryValue(4, 0)
-        else:
-            if before is not None and before.type != 7:
-                raise ValueError("Unexpected background app list type.")
-            values = before.data if before else []
-            selected = {family.casefold() for family in families}
-            values = [value for value in values if value.casefold() not in selected]
-            after = (
-                RegistryValue(7, sorted(set(values + families)))
-                if name == "deny"
-                else (RegistryValue(7, values) if before else None)
-            )
-        if before != after:
-            changes.append(Change(target, before, after, f"background-{name}"))
-    return changes
-
-
 def validate_target(target):
-    known = {option.target for option in SETTINGS.values()} | set(BACKGROUND.values())
+    known = (
+        {option.target for option in SETTINGS.values()}
+        | set(BACKGROUND.values())
+        | {ANIMATION_TASKBAR}
+        | LEGACY_STORAGE_TARGETS
+        | PERMISSION_EXCEPTIONS
+    )
     if target in known:
         return
     if (

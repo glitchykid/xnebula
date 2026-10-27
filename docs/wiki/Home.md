@@ -1,16 +1,16 @@
-# XNebula wiki
+# XNebula
 
-XNebula is a terminal application for Windows 11. Download the Windows x64 portable ZIP from the [latest release](https://github.com/glitchykid/xnebula/releases/latest), extract it, and open `Start-XNebula.cmd`. Python is included. For system-wide operations, open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. The terminal menu previews changes before asking you to type `APPLY`.
+Download the [latest Windows x64 ZIP](https://github.com/glitchykid/xnebula/releases/latest), extract it, and open `Start-XNebula-Admin.cmd`. The app includes Python and runs in Windows PowerShell with a black background and colored terminal controls.
+
+The six-action menu covers Windows apps, optional services, supported privacy protections, Windows animations, forced Edge removal, and settings recovery. Lists accept numbers, ranges, and Select All; every change previews before `APPLY`.
 
 - [Installation and command reference](https://github.com/glitchykid/xnebula/blob/main/README.md)
-- [Privacy and policy reference](Policies.md)
-- [Recovery and verification](Recovery.md)
-- [Runnable v0.2.1 release notes](https://github.com/glitchykid/xnebula/blob/main/docs/releases/v0.2.1.md)
+- [Policies and Windows integration](Policies.md)
+- [Recovery and validation](Recovery.md)
+- [Runnable v0.3.0 milestone](https://github.com/glitchykid/xnebula/blob/main/docs/releases/v0.3.0.md)
 
-The entire extracted folder must stay together. Backups/reports live in `.xnebula/logs` inside it. Extract updates into a fresh folder and preserve existing backups and profiles. Deleting the app does not undo Windows changes. Source/developer installations can use `.venv` with the same launchers.
+App removal discovers Microsoft Appx/MSIX packages across existing accounts and future-account provisioning. Essential Windows components, runtimes, and unrelated desktop programs are excluded. Edge removal is explicit and can force-delete only the validated installation directory if the signed vendor uninstaller leaves it installed. Services are disabled with recovery data rather than deleting their registrations.
 
-App removal covers all existing accounts and future-account provisioning. User-scoped privacy policies apply to the account running the app. Current startup support covers Run registry values. The app reports Windows edition restrictions and creates settings backups before writing.
+Policy availability depends on Windows edition/build. User preferences, including animations, affect the account running the app. Some privacy controls can stop microphone/camera access, notifications, location, or other features; previews describe these effects.
 
-For app removal, choose menu option **2**, then enter app numbers separated by spaces/commas or ranges (`1,3-5`). **9 — Select All** selects all eight supported apps; `all` also works. `0` or Enter cancels selection. Invalid input can be corrected in the picker. Selected names appear before the removal preview and explicit `APPLY` confirmation.
-
-These pages are maintained in `docs/wiki` alongside the code and can be mirrored to the repository's GitHub Wiki.
+Automatic backups/logs live in `.xnebula/logs`. Restore backups by number from the menu. Keep backups when updating into a new extracted folder. App deletion does not undo Windows settings. Previous profile/startup/storage/report screens have been removed to keep the app focused.

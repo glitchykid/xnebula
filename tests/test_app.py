@@ -123,7 +123,7 @@ class CliTests(unittest.TestCase):
         self.run_cli(["remove", "news", "--yes"], backend)
         self.assertEqual(backend.removed, [])
 
-    def test_failure_is_logged_and_stops_remaining_actions(self):
+    def test_failed_app_is_logged_and_remaining_removals_are_attempted(self):
         backend = FakeBackend(error=True)
         with tempfile.TemporaryDirectory() as directory:
             code, output = self.run_cli(
@@ -131,7 +131,7 @@ class CliTests(unittest.TestCase):
             )
             self.assertEqual(code, 1)
             self.assertIn("Access denied", output)
-            self.assertEqual(len(backend.removed), 1)
+            self.assertEqual(len(backend.removed), 2)
             self.assertIn(
                 '"status": "uncertain"', next(Path(directory).glob("*.jsonl")).read_text()
             )
@@ -149,11 +149,11 @@ class CliTests(unittest.TestCase):
         self.assertIn("news", self.run_cli(["catalog"])[1])
         self.assertIn("usage:", self.run_cli([])[1])
 
-    def test_scan_shows_installed_and_absent_apps(self):
+    def test_scan_shows_only_detected_removable_apps(self):
         code, output = self.run_cli(["scan"])
         self.assertEqual(code, 0)
         self.assertIn("news", output)
-        self.assertIn("absent", output)
+        self.assertIn("1 removable Windows apps detected", output)
 
     def test_unknown_selection_is_rejected_before_inventory(self):
         backend = FakeBackend()

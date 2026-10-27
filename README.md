@@ -1,137 +1,111 @@
 # XNebula
 
-A Python terminal app for Windows 11, operated from PowerShell. Preview and remove selected bundled apps across all accounts, configure privacy, manage startup entries, restrict background apps, configure Storage Sense, and disable Recall snapshots. Save configurations as profiles and review local change reports.
+A focused Windows 11 debloating app that runs in **Windows PowerShell with a black background**. The compact, colored terminal menu provides six actions:
 
-**Every system-changing command previews by default.** Add `--apply` to make changes and confirm the displayed plan. `--yes` skips confirmation only when paired with `--apply`. Building or testing this project does not debloat the development machine.
+1. Remove Windows apps.
+2. Disable optional services.
+3. Apply supported privacy protections.
+4. Disable Windows animations.
+5. Force uninstall/delete Microsoft Edge.
+6. Restore a settings backup.
 
-## Requirements
+Every change previews first. Type `APPLY` to proceed or press Enter to return. Number lists accept `1 3 5`, `1,3,5`, ranges such as `2-4`, and **Select All**. `0` exits or cancels selection.
 
-- Windows 11, build 22000 or newer. Windows 10 and Windows Server are outside the supported target.
-- The portable release includes **Python 3.15.2**, the latest stable release verified on 2026-10-27. No separate Python installation is needed. The portable ZIP targets **Windows x64**; ARM64 users can use a native Python installation and the developer setup below.
-- Built-in **Windows PowerShell 5.1** for native Appx/DISM compatibility. You may launch the Python CLI from Windows PowerShell or PowerShell 7; XNebula selects the built-in shell internally.
-- An **administrator** PowerShell terminal for inventory, removal, and registry operations. Catalogs, help, profile creation, and reports work without elevation.
-- Policy features require Windows Pro, Enterprise, Education, or corresponding IoT Enterprise editions. Home can use app removal and startup management, but unsupported policies are reported and skipped. Some suggestion policies require Enterprise/Education. Recall requires an enabled Recall component and Windows 11 24H2 with KB5055627 (26100.3915) or later.
+## Download and start
 
-## Download, extract, and start
+1. Download [xnebula-0.3.0-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.0/xnebula-0.3.0-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+2. Extract the **entire ZIP** into a writable folder, such as Documents.
+3. Open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. `Start-XNebula.cmd` opens without elevation, but system-wide inventory and changes require administrator rights.
 
-1. Download **[xnebula-0.2.1-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.2.1/xnebula-0.2.1-windows-x64.zip)** from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
-2. Right-click the ZIP, choose **Extract All**, and keep the complete folder somewhere writable, such as Documents.
-3. Open the extracted `XNebula` folder and double-click **`Start-XNebula.cmd`**. A numbered terminal menu opens in Windows PowerShell.
-4. For system-wide scans and changes, open **`Start-XNebula-Admin.cmd`** and accept Windows' administrator prompt. Opening either launcher does not apply changes.
+Python 3.15.2 is included. No separate Python installation, pip, Git, or network connection is required to run the portable app. Keep `.runtime`, `src`, and `scripts` alongside the launchers. The bundled release targets **Windows 11 x64, build 22000 or newer**. Windows 10/Server are outside the supported target; ARM64 developers can use the source installation with native Python.
 
-No Python setup, Git, pip, PATH changes, or internet connection is needed to start the portable app. Keep the bundled `.runtime`, `src`, and `scripts` folders with the launchers. The launchers use a process-only execution-policy setting; they do not change your saved PowerShell policy. Organization-enforced restrictions may still block unsigned scripts.
+Both launchers explicitly use built-in **Windows PowerShell 5.1**. They set the current console background to black with gray text, cyan menus, yellow previews, green successes, and red failures. Color output falls back to plain text when redirected or when `NO_COLOR` is present. Saved PowerShell profiles and system-wide console preferences are not edited. Launchers use a process-only execution-policy setting; organization-enforced script restrictions may still block them.
 
-Choose a menu number, select IDs, review the preview, and type `APPLY` only when ready. Enter returns from a preview, and `0` exits. Existing CLI commands still work from PowerShell:
+## Windows app removal
+
+The app discovers removable Microsoft Appx/MSIX packages installed for existing accounts or provisioned for new accounts. This includes packages beyond the previous eight-app catalog: Photos, Store, App Installer/winget, Xbox, Teams, Copilot, Widgets, Outlook, Notepad, Paint, and others, depending on the machine. The numbered picker shows detected apps and a dynamic **Select All** option.
+
+Removal closes processes inside the selected app's installation directory and invokes Windows' package removal commands for all accounts and future-account provisioning. Frameworks, runtimes, Windows Security, the terminal host, protected SystemApps, and components required for sign-in/shell operation are excluded. Third-party desktop programs are outside this removal scope. Classic desktop software is not enumerated as Appx; Edge has a separate explicit action.
+
+Save work before applying: force-closing selected apps can lose unsaved data. Removed app data and package installation media are **not** backed up. Selecting Store or App Installer can make later reinstallations harder; original signed packages, dependencies, licenses, or Windows installation media may be needed. A failed package is reported while the app attempts remaining removals, and the command returns failure if any removal failed.
 
 ```powershell
-.\Start-XNebula.cmd --help
-.\Start-XNebula.cmd privacy list
 .\Start-XNebula-Admin.cmd scan
+.\Start-XNebula-Admin.cmd remove all
+.\Start-XNebula-Admin.cmd remove all --apply
+# Individual IDs are shown by scan; existing aliases still work:
+.\Start-XNebula-Admin.cmd remove news weather --apply
 ```
 
-The standard launcher does not request elevation. Use the administrator launcher or an already elevated PowerShell session for commands requiring it. Both launchers preserve arguments and exit codes and keep relative profiles, backups, and reports in the extracted app folder.
+## Optional services
 
-For updates, extract the new release into a **new folder**, retain the old `.xnebula` backups and saved profiles, and copy them across if needed. To uninstall the app, retain required backups and remove its extracted folder; this does not undo Windows changes. Use `restore` first when you want to revert settings.
+Services are **stopped and disabled**, preserving their registration so recovery remains possible. The optional list covers diagnostic telemetry, WAP push routing, error reporting, Remote Registry, retail demo, maps, location, Xbox services, media sharing, fax, search indexing, and printing.
 
-Source checkouts do not include the runtime. Developers can install the app into `.venv` using the development commands below; the same launchers will use that environment. A wheel remains available for existing Python installations: `python -m pip install .\xnebula-0.2.1-py3-none-any.whl`.
+Each item explains its effect. Selecting all can disable printing/Print to PDF, Xbox sign-in/cloud saves/multiplayer, location, and media sharing, and make searches slower. These features may be useful on your PC; select only what you want disabled. Defender, Firewall, Windows Update, networking, sign-in, and other core services are not targets.
 
-## App removal
-
-In the terminal menu, choose **2 — Remove selected apps**. Apps appear with numbers and their removal effects. Enter `1 3 5`, `1,3,5`, or a range such as `2-4`. Choose **9 — Select All** (or type `all`) to select all eight supported apps. `0` or an empty entry returns to the main menu. Invalid entries let you retry without reopening the picker. The selected app names appear before the removal preview; type `APPLY` only after reviewing it. Apps absent from the machine are skipped.
-
-CLI commands continue to accept app IDs:
+The app skips services required by running dependents outside the selected optional set. Selected dependents are stopped before their parent service; native operations recheck dependencies and do not force-stop unrelated services. Backups preserve startup mode, delayed automatic startup, and running/stopped state.
 
 ```powershell
-.\Start-XNebula.cmd catalog
-.\Start-XNebula.cmd scan
-.\Start-XNebula.cmd remove news weather solitaire
-.\Start-XNebula.cmd remove news weather solitaire --apply
+.\Start-XNebula.cmd services list
+.\Start-XNebula-Admin.cmd services disable all
+.\Start-XNebula-Admin.cmd services disable DiagTrack WerSvc --apply
 ```
 
-Supported IDs: `news`, `weather`, `solitaire`, `clipchamp`, `feedback`, `gethelp`, `tips`, `maps`. Availability varies by Windows installation.
+## Privacy and animations
 
-Removal targets existing users with `Remove-AppxPackage -AllUsers` and provisioning for future users with `Remove-AppxProvisionedPackage -Online`. Exact identities are checked again before removal and queried afterward. Bundle parents are preferred over their main packages for the same name/version/publisher. Protected packages and wildcard removals are refused. Elevation is requested only by the explicit administrator launcher.
+The privacy action applies all **implemented, supported** protections: advertising ID, tailored/consumer suggestions, diagnostic collection limits, activity history publishing/upload, location, online speech, cross-device clipboard sync, Recall snapshots, packaged-app background activity, and packaged-app access to camera, microphone, contacts, calendars, email, messaging, tasks, call history, account information, and app diagnostics. Existing per-app allow/user-control policy exceptions are cleared when they would override a deny setting.
 
-Removal can delete app data. Journals are **not app backups**. Reinstall available apps through Microsoft Store; restoring provisioning for future accounts may require the original signed package, dependencies, and license. App removal has no automatic undo.
+This is a finite set of Windows controls, not a promise that all network traffic or tracking by every application disappears. Diagnostic data is disabled on supported Enterprise/Education/IoT Enterprise editions and limited to required data on Pro. Unsupported edition/build settings are reported. Most policies require Pro/Enterprise/Education; Home does not support every policy. Domain/MDM settings can override local values. Policy verification confirms registry values, not every component's effective behavior.
 
-## Privacy and Recall
+Camera/microphone/background restrictions can stop calls, recording, syncing, and notifications. Recall policy application can cause Windows to delete existing snapshots; a settings backup cannot recover them. Most policies apply machine-wide, while tailored experiences and some suggestions apply to the account running the app. Running with another administrator account changes that account's user preferences.
+
+Animation control disables Windows-managed UI effects, client-area animations, window minimize/restore, menu/tooltip animations and fades, smooth list scrolling, and taskbar animations **for the current account**. It persists and broadcasts preferences through `SystemParametersInfoW`; sign out if the taskbar still animates. Applications that implement their own animations may ignore these Windows preferences.
 
 ```powershell
 .\Start-XNebula.cmd privacy list
-.\Start-XNebula.cmd privacy set all
-.\Start-XNebula.cmd privacy set all --apply
-# Or choose individual controls:
-.\Start-XNebula.cmd privacy set advertising diagnostics location --apply
-.\Start-XNebula.cmd recall list
-.\Start-XNebula.cmd recall disable
-.\Start-XNebula.cmd recall disable --apply
+.\Start-XNebula-Admin.cmd privacy set all --apply
+.\Start-XNebula-Admin.cmd animations disable --apply
 ```
 
-Privacy controls cover advertising ID, optional diagnostics, tailored experiences, suggested consumer content, activity feed/publishing/upload, and location. Diagnostics are limited to required data; an existing stricter zero is preserved. Activity settings do not erase previously stored history. Disabling location affects location-dependent apps and features.
+## Force Microsoft Edge removal
 
-The preview identifies each registry hive: **HKLM** applies device-wide; **HKCU** applies only to the account running XNebula. Tailored experiences and Settings suggestions use HKCU. Running under a different administrator account changes that administrator's user settings. Other users' private registry hives are not loaded or edited.
+The explicit Edge action detects system-wide and current-account installations, verifies Microsoft signatures, closes only matching Edge browser processes, and runs the installed vendor uninstaller with force-uninstall arguments. If it leaves Edge installed, the confirmed action takes ownership/grants deletion access **only to the validated Edge Application directory** and force-deletes that directory. Junctions/symbolic links in that path or its contents cause refusal before recursive permission changes/deletion.
 
-Unsupported settings are explicitly reported and skipped. The command may finish successfully with skipped settings; read the preview. Domain/MDM policies can override or reapply settings. Registry verification confirms written values, not the effective behavior of every Windows component. Sign out or restart after applying policies.
-
-**Recall:** disabling snapshots can cause Windows to delete existing snapshots. Restoring the previous policy cannot recover them. XNebula detects the installed feature and supported build; it does not claim Recall is present merely because the registry policy exists.
-
-## Startup and background apps
+WebView2, Edge Update, third-party browsers, and browser profile data are outside the deletion target. The app reports **uninstalled** and **force-deleted files** separately. Forced file removal can leave an entry in Installed Apps or browser associations; Windows/Edge updates may restore the browser. Browser removal has no settings-backup undo—reinstall Edge to recover it. Access-denied, locked-file, and other failures are reported rather than claimed as success.
 
 ```powershell
-.\Start-XNebula.cmd startup list
-.\Start-XNebula.cmd startup disable 'user:Example'
-.\Start-XNebula.cmd startup disable 'user:Example' --apply
-.\Start-XNebula.cmd background list
-.\Start-XNebula.cmd background disable 'Example_publisher'
-.\Start-XNebula.cmd background disable 'Example_publisher' --apply
+.\Start-XNebula-Admin.cmd edge remove
+.\Start-XNebula-Admin.cmd edge remove --apply
 ```
 
-Startup management covers exact `Run` registry entries for the current user and machine-wide 32-bit/64-bit entries. It saves the original command and value type before removing the selected startup entry. Restore uses the backup command below. Startup folders, scheduled tasks, services, and packaged startup tasks are outside this version's startup manager.
+## Recovery, updating, and uninstalling XNebula
 
-Background restrictions use exact installed package family names. Existing deny-list entries are retained; selected families are removed from conflicting allow/user-control lists. Windows packaged-app policies do not stop every desktop application or service. Notifications and background syncing may stop for selected apps.
-
-## Storage cleanup settings
+Automatic backups and JSONL action logs live in `.xnebula/logs` inside the extracted app folder, regardless of where the launcher was called. Menu option **6** lists backups by date and kind, so restoration needs no typed file path. Settings restore rejects conflicting later edits and skips already-restored values. Service restore restores prior configuration; animation restore restores captured preferences. Original registry backups from older releases remain accepted for known targets.
 
 ```powershell
-.\Start-XNebula.cmd storage list
-.\Start-XNebula.cmd storage configure
-.\Start-XNebula.cmd storage configure --apply
-# Optional permanent cleanup after the specified number of days:
-.\Start-XNebula.cmd storage configure --downloads-days 30 --recycle-days 30 --apply
+.\Start-XNebula-Admin.cmd restore '.xnebula\logs\settings-EXAMPLE.json'
+.\Start-XNebula-Admin.cmd restore '.xnebula\logs\settings-EXAMPLE.json' --apply
 ```
 
-The default configuration enables Storage Sense and temporary-file cleanup when space is low, preserves Downloads and Recycle Bin items, and retains local cloud-backed files. Retention accepts **0–365 days**, where zero means never delete. This configures Windows' scheduled cleanup; it does not perform an immediate file purge or estimate reclaimed space. A settings backup cannot recover deleted files.
+Backups are bound to machine ID and account SID and can contain local identifiers or old startup commands. Restore only trusted backups, newest-first when changes overlap. Settings/service backups do not contain deleted apps, app data, Recall snapshots, or Edge files. Keep original installation media and independent data backups when needed.
 
-## Backups, profiles, and reports
+Changes are not an atomic transaction. Failures, interruptions, or timeouts can leave earlier work applied; an unfinished/uncertain journal action requires checking Windows state before retrying. Native deployment work may continue after a CLI timeout. Settings and service operations stop on errors; app package removal attempts remaining selected packages and reports failures.
 
-```powershell
-# Use the actual backup path printed by an apply command:
-.\Start-XNebula.cmd restore '.xnebula\logs\settings-EXAMPLE.json'
-.\Start-XNebula.cmd restore '.xnebula\logs\settings-EXAMPLE.json' --apply
+To update, extract the newer release into a new folder and retain/copy `.xnebula` backups as needed. To uninstall XNebula, retain needed backups and remove the extracted folder. Removing XNebula does not undo Windows changes. The previous profile, startup, storage-cleanup, background-picker, standalone Recall, and reports commands have been removed; Recall/background privacy controls are part of the privacy action and logging remains automatic.
 
-.\Start-XNebula.cmd profile save my-profile.json --apps news weather --privacy all --storage --recall
-.\Start-XNebula.cmd profile run my-profile.json
-.\Start-XNebula.cmd profile run my-profile.json --apply
-.\Start-XNebula.cmd report
-```
+Exit codes: `0` preview/completed/cancelled, `1` failure (including partial app removal), `2` invalid command line, `130` interrupted/closed input. No arguments open the menu in a terminal; redirected input displays help. `menu` explicitly opens the menu.
 
-Profiles also accept `--startup`, `--background`, `--downloads-days`, and `--recycle-days`. They contain data, not shell commands. Profile execution previews every section before applying any section, scans again during application, and stops on failure. Each applied section has its own backup/journal. Profiles are not atomic transactions; earlier sections can remain applied if a later section fails. A profile referencing a missing startup entry or background app must be updated for that machine.
+## Development and checks
 
-Settings backups are written and flushed before mutation and bound to the machine ID and account SID. Restoration preserves previous value types and deletes values that originally did not exist. It leaves empty keys in place. Restoration refuses conflicting later edits and skips values already restored. Restore newest backups first when changes overlap. Only restore trusted backups: they may contain startup commands and local account/machine identifiers.
-
-Default output is `.xnebula/logs` relative to the working directory. Set `--log-dir PATH` on apply/report commands to choose another location. JSONL journals track `planned`, `started`, `removed`/`configured`, and `uncertain` events. A started action without a result has an unknown outcome. After a timeout/interruption, review the journal and rescan before retrying; Windows deployment work can outlive the CLI process. Failure stops subsequent actions without claiming rollback.
-
-Exit codes: `0` completed/previewed/cancelled at confirmation, `1` operational or validation failure, `2` invalid command-line syntax, `130` Ctrl+C or closed input. No arguments open the menu in an interactive terminal; redirected input displays help. The launchers explicitly open the menu when no command is given. `xnebula menu` also opens it directly.
-
-## Development and validation
-
-Install full Python 3.15.2 from [python.org](https://www.python.org/downloads/), then clone this repository. The embedded release runtime is for running the app, not pip/venv development.
+Use full **Python 3.15.2** (latest stable verified 2026-10-27) with pip/venv for development. The embedded runtime is for running the app. There are no application runtime dependencies.
 
 ```powershell
 git clone https://github.com/glitchykid/xnebula.git
 Set-Location xnebula
 py -3.15 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e '.[dev]'
+Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.15.2/python-3.15.2-embed-amd64.zip -OutFile "$env:TEMP\python-embed.zip"
+.\.venv\Scripts\python.exe scripts/build_portable.py --runtime "$env:TEMP\python-embed.zip"
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
@@ -140,35 +114,25 @@ py -3.15 -m venv .venv
 .\.venv\Scripts\python.exe -m build
 ```
 
-Build the portable release before running tests to include the actual launcher tests:
+Build the portable ZIP before tests to include extracted-launcher tests. The builder verifies the runtime against the SHA-256 on the [official Python 3.15.2 release page](https://www.python.org/downloads/release/python-3152/), includes Python's license, and produces a ZIP checksum. Packaging excludes local runtimes, developer tools, profiles, and backups. Wheels/source archives are also in `dist/`; use `python -m build --no-isolation` when the pinned backend is already installed. Formatting: `python -m ruff format .`.
 
-```powershell
-Invoke-WebRequest -Uri https://www.python.org/ftp/python/3.15.2/python-3.15.2-embed-amd64.zip -OutFile "$env:TEMP\python-embed.zip"
-.\.venv\Scripts\python.exe scripts/build_portable.py --runtime "$env:TEMP\python-embed.zip"
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_launcher.py -v
-```
+`unittest` is the runner; combined statement/branch coverage must be at least **90%**, enforced by `coverage report`. Windows CI builds the ZIP and runs lint, formatting, coverage, and package builds. Native adapters are tested with substitute service/Appx/Edge cmdlets and an in-memory Windows preference API. **Tests do not delete host apps, stop host services, or alter host privacy/animation preferences.** Real UAC approval, native destructive operations, effective policies, and visual console rendering still need manual validation in an elevated disposable Windows VM.
 
-The builder checks the Python archive against the SHA-256 published on the [official 3.15.2 release page](https://www.python.org/downloads/release/python-3152/). It includes Python's license and writes a `.zip.sha256` checksum file alongside the ZIP. Only application source, launchers, runtime, and documentation enter the bundle; local profiles, backups, and developer tools are excluded. Windows CI builds this ZIP before the full coverage run so launcher tests are not skipped. UAC command encoding is tested without showing a UAC prompt; approval/cancellation of the real Windows prompt remains a manual check.
-
-To format deliberately: `.\.venv\Scripts\python.exe -m ruff format .`. Wheels and source archives are written to `dist/`. For an offline build with the pinned backend already installed, use `python -m build --no-isolation`.
-
-`unittest` is the test runner. Combined statement/branch coverage must be at least **90%**, enforced by `coverage report`. Windows CI runs the same lint, format, coverage, and build checks. PowerShell integration tests run the production scripts with substitute Appx/DISM functions; registry tests use an in-memory API. Tests do not uninstall packages or modify real privacy/startup settings. Validate native mutations and effective policies separately in a disposable elevated Windows VM before broad deployment. The local development terminal did not provide administrator rights, so live system-wide mutation tests were not run.
-
-Tool versions verified against official releases: Python 3.15.2, Ruff 0.17.2, Coverage.py 7.17.0, build 1.6.1, Hatchling 1.32.4. Development/build dependencies are pinned in `pyproject.toml`.
+Pinned development/build tools: Ruff 0.17.2, Coverage.py 7.17.0, build 1.6.1, Hatchling 1.32.4. OS integration uses built-in Windows PowerShell 5.1 and documented Windows APIs.
 
 ## Layout
 
 ```text
-src/xnebula/       CLI, app catalog/planner, PowerShell bridge, registry settings,
-                   backups, profiles, and journals
-tests/             unit tests and PowerShell integration tests
-docs/wiki/         versioned wiki pages
-docs/releases/     milestone release notes and validation limitations
+src/xnebula/       CLI/menu, Windows app discovery, services, privacy,
+                   animations, Edge removal, console colors, and recovery
+tests/             unit tests, native adapter tests, extracted launcher tests
+scripts/           PowerShell launcher and portable ZIP builder
+docs/wiki/         versioned operation/policy/recovery documentation
+docs/releases/     milestone release notes
 .github/workflows/ Windows CI
-scripts/           PowerShell launcher and verified portable ZIP builder
-Start-XNebula*.cmd Standard and administrator double-click entry points
-START-HERE.txt     Portable quick-start instructions
-pyproject.toml     package metadata, dev dependencies, lint/coverage configuration
+Start-XNebula*.cmd standard and administrator launchers
+START-HERE.txt     portable quick start
+pyproject.toml     package, tooling, and coverage configuration
 ```
 
-There are no graphical assets or GUI. Repository guidelines remain in `AGENTS.md` unchanged. See the [wiki home](docs/wiki/Home.md), [policy reference](docs/wiki/Policies.md), and [release notes](docs/releases/v0.2.1.md).
+See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.0 release notes](docs/releases/v0.3.0.md). `AGENTS.md` remains unchanged.

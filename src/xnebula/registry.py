@@ -1,10 +1,9 @@
 """64-bit Windows registry access, with platform checks before writes."""
 
-import json
 import sys
 
-from xnebula.settings import STARTUP_KEYS, RegistryValue, Target, validate_target
-from xnebula.windows import BackendError, WindowsBackend
+from xnebula.settings import RegistryValue, validate_target
+from xnebula.windows import WindowsBackend
 
 
 class WindowsRegistry:
@@ -76,36 +75,3 @@ class WindowsRegistry:
                 self._hive(target), target.key, 0, self.api.KEY_SET_VALUE | self.api.KEY_WOW64_64KEY
             ) as handle:
                 self.api.SetValueEx(handle, target.name, 0, value.type, value.data)
-
-    def startup(self):
-        entries = {}
-        for scope, (hive, key) in STARTUP_KEYS.items():
-            try:
-                root = self.api.HKEY_LOCAL_MACHINE if hive == "HKLM" else self.api.HKEY_CURRENT_USER
-                with self.api.OpenKey(
-                    root, key, 0, self.api.KEY_READ | self.api.KEY_WOW64_64KEY
-                ) as handle:
-                    for index in range(self.api.QueryInfoKey(handle)[1]):
-                        name, _, _ = self.api.EnumValue(handle, index)
-                        if name:
-                            entries[f"{scope}:{name}"] = Target(hive, key, name)
-            except FileNotFoundError:
-                continue
-        return entries
-
-    def background_apps(self):
-        payload = self.bridge._run(
-            "$names = @(Get-AppxPackage -AllUsers -PackageTypeFilter Main -ErrorAction Stop | "
-            "Where-Object { -not $_.IsFramework -and -not $_.NonRemovable } | "
-            "Select-Object -ExpandProperty PackageFamilyName -Unique); "
-            "ConvertTo-Json -InputObject @($names) -Compress"
-        )
-        try:
-            names = json.loads(payload)
-            if not isinstance(names, list) or any(
-                not isinstance(name, str) or not name for name in names
-            ):
-                raise ValueError
-            return names
-        except ValueError as error:
-            raise BackendError("Invalid background app inventory.") from error

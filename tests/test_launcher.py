@@ -57,8 +57,8 @@ class PortableLauncherTests(unittest.TestCase):
     def test_portable_removal_picker_shows_numbers_select_all_and_retry(self):
         result = self.run_launcher([], input="2\n999\n0\n0\n")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("1  Microsoft News", result.stdout)
-        self.assertIn("9  Select All", result.stdout)
+        self.assertIn("Connected User Experiences", result.stdout)
+        self.assertIn("Select All", result.stdout)
         self.assertIn("Invalid selection", result.stdout)
 
     def test_batch_launcher_works_from_another_directory_with_special_characters(self):
@@ -76,21 +76,10 @@ class PortableLauncherTests(unittest.TestCase):
         self.assertIn(__version__, result.stdout)
 
     def test_arguments_with_spaces_survive_and_data_stays_in_app_folder(self):
-        result = self.run_launcher(
-            [
-                "profile",
-                "save",
-                "my profile.json",
-                "--startup",
-                "user:My App",
-                "--privacy",
-                "location",
-            ]
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        profile = json.loads((self.app / "my profile.json").read_text())
-        self.assertEqual(profile["startup"], ["user:My App"])
-        self.assertFalse((self.directory / "my profile.json").exists())
+        (self.app / "my backup.json").write_text('{"kind":"unsupported"}')
+        result = self.run_launcher(["restore", "my backup.json"])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Unsupported backup type", result.stderr)
 
     def test_invalid_command_returns_exit_code_without_uninstalling_anything(self):
         self.assertEqual(self.run_launcher(["not-a-command"]).returncode, 2)

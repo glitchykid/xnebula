@@ -1,103 +1,102 @@
-"""Terminal commands for reversible Windows configuration."""
+"""Focused privacy and recovery commands."""
 
+import json
 from pathlib import Path
 
+from xnebula.console import paint
 from xnebula.registry import WindowsRegistry
-from xnebula.settings import (
-    SETTINGS,
-    apply_changes,
-    plan_background,
-    plan_settings,
-    plan_startup,
-    restore_plan,
-)
+from xnebula.settings import SETTINGS, apply_changes, plan_settings, restore_plan
 
 
 def mutation_options(command):
-    command.add_argument("--apply", action="store_true", help="Apply the previewed changes.")
+    command.add_argument("--apply", action="store_true", help="Apply the displayed preview.")
     command.add_argument("--yes", action="store_true", help="Skip the typed confirmation.")
     command.add_argument("--log-dir", type=Path, default=Path(".xnebula/logs"))
 
 
 def add_commands(commands):
-    for group in ("privacy", "storage", "recall", "startup", "background"):
-        root = commands.add_parser(group, help=f"Inspect and configure {group}.")
-        sub = root.add_subparsers(dest="action", required=True)
-        sub.add_parser("list", help="List settings or discover entries.")
-        verb = {"privacy": "set", "storage": "configure"}.get(group, "disable")
-        change = sub.add_parser(verb, allow_abbrev=False)
-        if group in ("privacy", "startup", "background"):
-            change.add_argument(
-                "ids", nargs="+", help="Exact IDs from list; privacy also accepts all."
-            )
-        if group == "storage":
-            change.add_argument(
-                "--downloads-days",
-                type=int,
-                default=0,
-                help="0 keeps Downloads; 1-365 opts into deletion after that many unused days.",
-            )
-            change.add_argument(
-                "--recycle-days",
-                type=int,
-                default=0,
-                help="0 keeps Recycle Bin items; 1-365 opts into permanent deletion.",
-            )
-        mutation_options(change)
-    restore = commands.add_parser("restore", help="Preview restoring a settings/startup backup.")
+    root = commands.add_parser(
+        "privacy", help="Apply supported privacy protections, including Recall."
+    )
+    sub = root.add_subparsers(dest="action", required=True)
+    sub.add_parser("list")
+    change = sub.add_parser("set", allow_abbrev=False)
+    change.add_argument("ids", nargs="*", default=["all"])
+    mutation_options(change)
+    restore = commands.add_parser(
+        "restore", help="Restore a settings, service, or animation backup."
+    )
     restore.add_argument("backup", type=Path)
     mutation_options(restore)
 
 
-def handle(args, registry=None):
-    if args.command in ("privacy", "storage", "recall") and args.action == "list":
+def confirm(args):
+    return args.yes or input("Type APPLY to continue, or Enter to cancel: ").strip() == "APPLY"
+
+
+def preview_changes(changes):
+    print(paint(f"Preview: {len(changes)} setting change(s)", "title"))
+    shown = set()
+    for change in changes:
+        if change.label not in shown:
+            shown.add(change.label)
+            option = SETTINGS.get(change.label)
+            description = option.effect if option else change.label
+            scope = "this account" if change.target.hive == "HKCU" else "all accounts"
+            print(f"  - {description} [{scope}]")
+
+
+def handle(args, registry=None, *, services=None, animations=None, on_preview=None):
+    if args.command == "privacy" and args.action == "list":
         for key, option in SETTINGS.items():
-            if option.group == args.command:
-                print(f"{key:22} {option.target.hive:4} {option.effect}")
-        print("Policies require Pro/Enterprise/Education. HKCU means the account running XNebula.")
+            print(f"{key:22} {option.effect}")
         return 0
+    if args.command == "restore":
+        document = json.loads(args.backup.read_text(encoding="utf-8"))
+        if not isinstance(document, dict):
+            raise ValueError("Invalid backup file.")
+        kind = document.get("kind")
+        if kind in ("services", "animations"):
+            from xnebula.animations import WindowsAnimations, restore_animations
+            from xnebula.services import WindowsServices, restore_services
+
+            if kind == "services":
+                manager = services if services is not None else WindowsServices()
+                operation = restore_services
+            else:
+                manager = (
+                    animations if animations is not None else WindowsAnimations(registry=registry)
+                )
+                operation = restore_animations
+            changes = operation(args.backup, manager, args.log_dir, apply=False)
+            if on_preview is not None:
+                on_preview(bool(changes))
+            if args.apply and changes and confirm(args):
+                operation(args.backup, manager, args.log_dir)
+            elif not args.apply:
+                print("Preview only. Add --apply to restore.")
+            return 0
+        if kind is not None:
+            raise ValueError("Unsupported backup type.")
     registry = registry if registry is not None else WindowsRegistry()
-    if args.command == "startup":
-        if args.action == "list":
-            for key, target in registry.startup().items():
-                print(f"{key}  {registry.read(target)}")
-            print("Lists Run registry entries: current account and machine-wide (32/64-bit).")
-            return 0
-        changes = plan_startup(args.ids, registry)
-    elif args.command == "background":
-        if args.action == "list":
-            for family in registry.background_apps():
-                print(family)
-            return 0
-        changes = plan_background(args.ids, registry)
-        print("Selected packaged apps may stop background notifications and syncing.")
-    elif args.command == "restore":
+    if args.command == "restore":
         changes = restore_plan(args.backup, registry)
     else:
-        changes, skipped = plan_settings(
-            args.command,
-            getattr(args, "ids", ["all"]),
-            registry,
-            downloads_days=getattr(args, "downloads_days", 0),
-            recycle_days=getattr(args, "recycle_days", 0),
-        )
+        changes, skipped = plan_settings("privacy", args.ids or ["all"], registry)
         for reason in skipped:
-            print(f"Unsupported: {reason}")
-    print(f"Preview: {len(changes)} registry value change(s)")
-    for change in changes:
-        if change.label in SETTINGS:
-            print(SETTINGS[change.label].effect)
-        print(f"  {change.label}: {change.target.hive}\\{change.target.key} [{change.target.name}]")
-        print(f"    {change.before} -> {change.after}")
+            print(paint(f"[SKIP] {reason}", "warning"))
+    preview_changes(changes)
+    if on_preview is not None:
+        on_preview(len(changes))
     if not changes:
         print("Nothing to change.")
         return 0
     if not args.apply:
-        print("No changes made. Add --apply to continue.")
+        print("Preview only. Add --apply to make these changes.")
         return 0
-    if not args.yes and input("Type APPLY to continue: ").strip() != "APPLY":
+    if not confirm(args):
         print("Cancelled. No changes made.")
         return 0
     apply_changes(changes, registry, args.log_dir)
-    print("Registry values verified. Sign out or restart for policy changes to take effect.")
+    print(paint("[OK] Settings saved. Sign out or restart to apply every policy.", "success"))
     return 0

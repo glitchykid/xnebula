@@ -5,11 +5,9 @@ from pathlib import Path
 
 from xnebula.settings import (
     SETTINGS,
-    Change,
     RegistryValue,
     apply_changes,
     plan_settings,
-    plan_startup,
     restore_plan,
 )
 
@@ -32,11 +30,6 @@ class MemoryRegistry:
             raise OSError("denied")
         self.values[target] = value
         self.writes.append((target, value))
-
-    def startup(self):
-        from xnebula.settings import STARTUP_KEYS, Target
-
-        return {"user:Example": Target("HKCU", STARTUP_KEYS["user"][1], "Example")}
 
 
 class SettingsTests(unittest.TestCase):
@@ -62,7 +55,7 @@ class SettingsTests(unittest.TestCase):
         self.assertTrue(skipped)
         registry.edition = "Professional"
         registry.recall_available = False
-        self.assertTrue(plan_settings("recall", ["all"], registry)[1])
+        self.assertTrue(plan_settings("privacy", ["recall-snapshots"], registry)[1])
 
     def test_backup_precedes_writes_and_restores_absent_and_existing_values(self):
         registry = MemoryRegistry()
@@ -116,12 +109,3 @@ class SettingsTests(unittest.TestCase):
                 backup.write_text(json.dumps(document))
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     restore_plan(backup, registry)
-
-    def test_startup_disable_preserves_command_for_restore(self):
-        registry = MemoryRegistry()
-        target = registry.startup()["user:Example"]
-        registry.values[target] = RegistryValue(2, r"%LOCALAPPDATA%\Example.exe")
-        changes = plan_startup(["user:Example"], registry)
-        self.assertEqual(changes, [Change(target, registry.values[target], None, "user:Example")])
-        with self.assertRaises(ValueError):
-            plan_startup(["*"], registry)

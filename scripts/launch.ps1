@@ -20,6 +20,18 @@ if ($MyInvocation.InvocationName -eq '.') { return }
 
 $ErrorActionPreference = 'Stop'
 try {
+    # Apply the black palette to this console session, including the elevated host.
+    if (-not [Console]::IsOutputRedirected) {
+        try {
+            $Host.UI.RawUI.BackgroundColor = 'Black'
+            $Host.UI.RawUI.ForegroundColor = 'Gray'
+            [Console]::BackgroundColor = [ConsoleColor]::Black
+            [Console]::ForegroundColor = [ConsoleColor]::Gray
+            [Console]::Clear()
+            $Host.PrivateData.ErrorBackgroundColor = 'Black'
+            $Host.PrivateData.WarningBackgroundColor = 'Black'
+        } catch { }
+    }
     $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     if ($Elevate) {
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

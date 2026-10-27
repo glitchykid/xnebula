@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from xnebula.core import CATALOG, Package
+from xnebula.core import Package, removable_name
 
 
 class BackendError(RuntimeError):
@@ -16,7 +16,17 @@ class BackendError(RuntimeError):
 
 
 INVENTORY = r"""
-$packages = @(Get-AppxPackage -AllUsers -PackageTypeFilter Bundle,Main -ErrorAction Stop)
+$allPackages = @(Get-AppxPackage -AllUsers -PackageTypeFilter Bundle,Main,Framework,Resource `
+    -ErrorAction Stop)
+$packages = @($allPackages | Where-Object { -not $_.IsFramework -and -not $_.IsResourcePackage })
+$protectedNames = @($allPackages | Where-Object {
+    $_.IsFramework -or ($_.NonRemovable -and -not $_.IsResourcePackage) -or
+    $_.InstallLocation -like ($env:SystemRoot + '\SystemApps\*')
+} | ForEach-Object { $_.Name })
+$microsoftPublishers = @('8wekyb3d8bbwe', 'cw5n1h2txyewy', '8xb3b82q0j6ny') + @(
+    $packages | Where-Object { $_.Publisher -match '^CN=Microsoft (Corporation|Windows)' } |
+    ForEach-Object { $_.PublisherId }
+)
 $bundles = @($packages | Where-Object { $_.IsBundle } |
     ForEach-Object { $_.Name + '|' + $_.Version + '|' + $_.PublisherId })
 $rows = @(
@@ -25,13 +35,16 @@ $rows = @(
         if (-not $p.IsBundle -and $bundles -contains $identity) { continue }
         [PSCustomObject]@{
             name = $p.Name; full_name = $p.PackageFullName; kind = 'installed'
-            protected = [bool]($p.NonRemovable -or $p.IsFramework -or $p.IsResourcePackage)
+            protected = [bool](($protectedNames -contains $p.Name) -or
+                ($p.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)'))
         }
     }
     foreach ($p in @(Get-AppxProvisionedPackage -Online -ErrorAction Stop)) {
         [PSCustomObject]@{
             name = $p.DisplayName; full_name = $p.PackageName
-            kind = 'provisioned'; protected = $false
+            kind = 'provisioned'
+            protected = [bool](($protectedNames -contains $p.DisplayName) -or
+                ($microsoftPublishers -notcontains ($p.PackageName -split '_')[-1]))
         }
     }
 )
@@ -67,7 +80,7 @@ def parse_inventory(payload: str) -> list[Package]:
 
 
 def removal_script(item: Package) -> str:
-    if item.protected or item.name not in {app.name for app in CATALOG}:
+    if item.protected or not removable_name(item.name):
         raise BackendError("Refusing to remove a protected or unlisted package.")
     if item.kind not in ("installed", "provisioned") or not item.full_name:
         raise BackendError("Invalid package identity.")
@@ -87,8 +100,24 @@ $p = @(Get-AppxPackage -AllUsers -PackageTypeFilter Bundle,Main -ErrorAction Sto
     Where-Object { $_.PackageFullName -eq $target.full -and $_.Name -eq $target.name })
 if ($p.Count -eq 0) { throw 'Package changed since preview. Scan again.' }
 foreach ($match in $p) {
-    if ($match.NonRemovable -or $match.IsFramework -or $match.IsResourcePackage) {
+    if ($match.NonRemovable -or $match.IsFramework -or $match.IsResourcePackage -or
+        $match.InstallLocation -like ($env:SystemRoot + '\SystemApps\*') -or
+        $match.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)') {
         throw 'Package is protected. No removal attempted.'
+    }
+}
+$locations = @($p | Where-Object { $_.InstallLocation } |
+    ForEach-Object { $_.InstallLocation.TrimEnd('\') + '\' })
+if ($locations.Count -gt 0) {
+    foreach ($process in @(Get-Process -ErrorAction SilentlyContinue)) {
+        try { $executable = $process.Path } catch { continue }
+        if (-not $executable) { continue }
+        foreach ($location in $locations) {
+            if ($executable.StartsWith($location, [StringComparison]::OrdinalIgnoreCase)) {
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                break
+            }
+        }
     }
 }
 Remove-AppxPackage -Package $target.full -AllUsers -Confirm:$false -ErrorAction Stop

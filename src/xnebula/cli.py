@@ -1,125 +1,273 @@
-"""PowerShell-friendly terminal commands."""
+"""Windows app removal, services, privacy, animations, and recovery."""
 
 import argparse
 import sys
 from dataclasses import asdict
-from pathlib import Path
 
-from xnebula import __version__, profiles, settings_cli
-from xnebula.core import CATALOG, build_plan, selected_apps
+from xnebula import __version__, settings_cli
+from xnebula.animations import WindowsAnimations, disable_animations
+from xnebula.console import paint
+from xnebula.core import CATALOG, available_apps, build_plan, removable_name, selected_apps
+from xnebula.edge import WindowsEdge
 from xnebula.journal import Journal
 from xnebula.menu import run_menu
+from xnebula.services import SERVICES, WindowsServices, apply_service_changes, plan_services
+from xnebula.settings import RegistryValue
 from xnebula.windows import BackendError, WindowsBackend
 
 
-def parser() -> argparse.ArgumentParser:
+def parser():
     result = argparse.ArgumentParser(
         prog="xnebula",
-        description="Preview Windows app removal, privacy, startup, and cleanup settings.",
+        description="Windows app removal, optional services, privacy, and animations.",
         allow_abbrev=False,
     )
     result.add_argument("--version", action="version", version=f"XNebula {__version__}")
     commands = result.add_subparsers(dest="command")
     settings_cli.add_commands(commands)
-    profiles.add_commands(commands)
-    commands.add_parser("menu", help="Open the guided terminal menu.")
-    commands.add_parser("catalog", help="List supported app IDs and removal effects.")
+    commands.add_parser("menu", help="Open the numbered menu.")
     commands.add_parser(
-        "scan", help="Scan installed and provisioned apps (administrator required)."
+        "catalog", help="List example bundled apps; scan discovers apps on this PC."
     )
+    commands.add_parser("scan", help="List removable Windows apps on this PC.")
     remove = commands.add_parser(
-        "remove", help="Preview selected apps; use --apply to remove.", allow_abbrev=False
+        "remove", help="Remove selected app IDs or all removable Windows apps.", allow_abbrev=False
     )
     remove.add_argument("apps", nargs="+", metavar="APP_ID")
-    remove.add_argument(
-        "--apply", action="store_true", help="Apply system-wide removal after confirmation."
+    settings_cli.mutation_options(remove)
+    services = commands.add_parser("services", help="Disable optional Windows services.")
+    sub = services.add_subparsers(dest="action", required=True)
+    sub.add_parser("list")
+    disable = sub.add_parser("disable")
+    disable.add_argument("ids", nargs="*", default=["all"])
+    settings_cli.mutation_options(disable)
+    animations = commands.add_parser("animations", help="Disable Windows-managed animations.")
+    animation_sub = animations.add_subparsers(dest="action", required=True)
+    settings_cli.mutation_options(animation_sub.add_parser("disable"))
+    edge = commands.add_parser(
+        "edge", help="Force-mode uninstall through Edge's signed uninstaller."
     )
-    remove.add_argument(
-        "--yes", action="store_true", help="Skip confirmation when combined with --apply."
-    )
-    remove.add_argument(
-        "--log-dir",
-        type=Path,
-        default=Path(".xnebula/logs"),
-        help="Action journal directory (default: .xnebula/logs).",
-    )
+    edge_sub = edge.add_subparsers(dest="action", required=True)
+    settings_cli.mutation_options(edge_sub.add_parser("remove"))
     return result
 
 
-def main(argv=None, *, backend=None, registry=None) -> int:
+def apply_requested(args):
+    if not args.apply:
+        print("Preview only. Add --apply to continue.")
+        return False
+    if not settings_cli.confirm(args):
+        print("Cancelled. No changes made.")
+        return False
+    return True
+
+
+def remove_apps(args, backend, on_preview=None):
+    packages = backend.inventory()
+    if args.command == "scan":
+        apps = available_apps(packages)
+        for number, app in enumerate(apps, start=1):
+            print(f"{number:2}  {app.title:28} {app.id}")
+        print(f"{len(apps)} removable Windows apps detected. Essential components are excluded.")
+        return 0
+    plan = build_plan(args.apps, packages)
+    if on_preview is not None:
+        on_preview(len(plan))
+    print(paint("Preview: remove Windows apps for all existing and new accounts", "title"))
+    for app in selected_apps(args.apps, packages):
+        print(f"  - {app.title}")
+    if any(
+        item.name in ("Microsoft.WindowsStore", "Microsoft.DesktopAppInstaller") for item in plan
+    ):
+        print(
+            paint(
+                "Removing Store/App Installer can make reinstalling apps harder.",
+                "warning",
+            )
+        )
+    if not plan:
+        print("Nothing to remove.")
+        return 0
+    print(
+        paint(
+            "Running apps may close; unsaved work may be lost. App data is not backed up.",
+            "warning",
+        )
+    )
+    if not apply_requested(args):
+        return 0
+    journal = Journal(args.log_dir)
+    failed = 0
+    try:
+        journal.write(
+            "planned", scope="all-users-and-provisioning", packages=[asdict(item) for item in plan]
+        )
+        print(f"Action log: {journal.path.resolve()}")
+        for item in plan:
+            journal.write("started", package=asdict(item))
+            try:
+                backend.remove(item)
+            except BackendError as error:
+                failed += 1
+                journal.write("uncertain", package=asdict(item), error=str(error))
+                print(paint(f"[FAILED] {item.name}: {error}", "error"))
+                continue
+            except KeyboardInterrupt:
+                journal.write("uncertain", package=asdict(item), error="Interrupted")
+                raise
+            journal.write("removed", package=asdict(item))
+            print(paint(f"[REMOVED] {item.name} ({item.kind})", "success"))
+    finally:
+        journal.close()
+    print(f"Completed: {len(plan) - failed} package removal(s); {failed} failed.")
+    return int(bool(failed))
+
+
+def main(
+    argv=None,
+    *,
+    backend=None,
+    registry=None,
+    services=None,
+    animations=None,
+    edge=None,
+    on_preview=None,
+):
     arguments = parser()
     args = arguments.parse_args(argv)
+
+    pending = [True]
+
+    def invoke(command):
+        pending[0] = True
+        return main(
+            command,
+            backend=backend,
+            registry=registry,
+            services=services,
+            animations=animations,
+            edge=edge,
+            on_preview=lambda count: pending.__setitem__(0, bool(count)),
+        )
+
     if args.command == "menu" or (args.command is None and sys.stdin.isatty()):
-        return run_menu(lambda command: main(command, backend=backend, registry=registry))
+        return run_menu(
+            invoke,
+            apps_provider=lambda: available_apps(
+                (backend if backend is not None else WindowsBackend()).inventory()
+            ),
+            can_apply=lambda: pending[0],
+        )
     if args.command is None:
         arguments.print_help()
         return 0
-    if args.command == "catalog":
-        for app in CATALOG:
-            print(f"{app.id:12} {app.title:24} {app.impact}")
-        return 0
     try:
-        if args.command in ("privacy", "storage", "recall", "startup", "background", "restore"):
-            return settings_cli.handle(args, registry)
-        if args.command in ("profile", "report"):
-            return profiles.handle(
-                args, lambda command: main(command, backend=backend, registry=registry)
-            )
-        if args.command == "remove":
-            selected_apps(args.apps)
-        backend = backend if backend is not None else WindowsBackend()
-        packages = backend.inventory()
-        if args.command == "scan":
-            print("Scope: all existing accounts + provisioning for new accounts")
+        if args.command == "catalog":
             for app in CATALOG:
-                matches = [p for p in packages if p.name.casefold() == app.name.casefold()]
-                states = sorted({"protected" if p.protected else p.kind for p in matches})
-                print(f"{app.id:12} {app.title:24} {', '.join(states) or 'absent'}")
+                print(f"{app.id:12} {app.title:24} {app.impact}")
             return 0
-        plan = build_plan(args.apps, packages)
-        print("Preview: all existing accounts + provisioning for new accounts")
-        for app in selected_apps(args.apps):
-            print(f"  {app.title}: {app.impact}")
-        for item in plan:
-            print(f"  {item.kind:12} {item.full_name}")
-        if not plan:
-            print("Nothing to remove.")
-            return 0
-        if not args.apply:
-            print("No changes made. Add --apply to remove these packages.")
-            return 0
-        print("Removal affects every account and may delete app data. The journal is not a backup.")
-        if not args.yes and input("Type REMOVE to continue: ").strip() != "REMOVE":
-            print("Cancelled. No changes made.")
-            return 0
-        journal = Journal(args.log_dir)
-        try:
-            journal.write(
-                "planned", scope="all-users-and-provisioning", packages=[asdict(p) for p in plan]
+        if args.command in ("privacy", "restore"):
+            return settings_cli.handle(
+                args, registry, services=services, animations=animations, on_preview=on_preview
             )
-            print(f"Journal: {journal.path.resolve()}")
-            for item in plan:
-                journal.write("started", package=asdict(item))
-                try:
-                    backend.remove(item)
-                except (BackendError, KeyboardInterrupt) as error:
-                    journal.write(
-                        "uncertain", package=asdict(item), error=str(error) or "Interrupted"
+        if args.command == "services":
+            if args.action == "list":
+                for option in SERVICES:
+                    print(f"{option.name:20} {option.effect}")
+                return 0
+            manager = services if services is not None else WindowsServices()
+            changes, skipped = plan_services(args.ids or ["all"], manager.inventory())
+            if on_preview is not None:
+                on_preview(len(changes))
+            print(paint(f"Preview: disable {len(changes)} optional service(s)", "title"))
+            for reason in skipped:
+                print(paint("[SKIP] " + reason, "warning"))
+            for change in changes:
+                option = next(option for option in SERVICES if option.name == change.before.name)
+                print(f"  - {option.title}: {option.effect}")
+            if not changes:
+                print("Nothing to change.")
+            elif apply_requested(args):
+                apply_service_changes(changes, manager, args.log_dir)
+            return 0
+        if args.command == "animations":
+            manager = animations if animations is not None else WindowsAnimations(registry=registry)
+            state = manager.read()
+            if on_preview is not None:
+                on_preview(any(state.values.values()) or state.taskbar != RegistryValue(4, 0))
+            print(paint("Preview: turn off Windows animations for this account", "title"))
+            print("Includes window minimize/restore, taskbar, menus, tooltips, and fades.")
+            print("Apps with their own animation settings may ignore Windows preferences.")
+            print(f"Currently enabled: {sum(state.values.values())} Windows effect group(s).")
+            if apply_requested(args):
+                disable_animations(manager, args.log_dir)
+                print(
+                    paint(
+                        "[OK] Windows animations disabled. Sign out if the taskbar still animates.",
+                        "success",
                     )
-                    raise
-                journal.write("removed", package=asdict(item))
-                print(f"Removed {item.kind}: {item.name}")
-        finally:
-            journal.close()
-        print("Selected removals completed. Run 'xnebula scan' to review remaining apps.")
-        return 0
+                )
+            return 0
+        if args.command == "edge":
+            manager = edge if edge is not None else WindowsEdge()
+            installations = manager.inventory()
+            if on_preview is not None:
+                on_preview(len(installations))
+            if not installations:
+                print("Microsoft Edge is not installed for this machine/current account.")
+                return 0
+            print(paint("Preview: force uninstall Microsoft Edge", "title"))
+            print("Edge windows will close; save your work. Uses the signed vendor uninstaller.")
+            print(
+                paint(
+                    "If uninstall is blocked, force-delete only Edge's installation files.",
+                    "warning",
+                )
+            )
+            print("Forced deletion may leave an installed-app entry; updates may restore Edge.")
+            print("Browser removal has no settings-backup undo. Windows may restrict removal.")
+            for item in installations:
+                print("  - Microsoft Edge: " + ("machine-wide" if item.system else "this account"))
+            if not apply_requested(args):
+                return 0
+            journal = Journal(args.log_dir)
+            try:
+                for item in installations:
+                    journal.write("started", operation="edge", installation=asdict(item))
+                    try:
+                        result = manager.remove(item)
+                    except (BackendError, KeyboardInterrupt) as error:
+                        journal.write(
+                            "uncertain", operation="edge", error=str(error) or "Interrupted"
+                        )
+                        raise
+                    journal.write(
+                        "removed", operation="edge", method=result, installation=asdict(item)
+                    )
+                    status = (
+                        "[FORCE-DELETED] Edge files"
+                        if result == "force-deleted"
+                        else "[REMOVED] Microsoft Edge"
+                    )
+                    print(paint(status, "success"))
+            finally:
+                journal.close()
+            return 0
+        if args.command == "remove" and any(
+            app_id != "all"
+            and app_id not in {app.id for app in CATALOG}
+            and not removable_name(app_id)
+            for app_id in args.apps
+        ):
+            raise ValueError("Choose app IDs from scan or all; wildcards are not accepted.")
+        return remove_apps(args, backend if backend is not None else WindowsBackend(), on_preview)
     except (BackendError, ValueError, OSError) as error:
-        print(f"Error: {error}", file=sys.stderr)
+        print(paint(f"[ERROR] {error}", "error"), file=sys.stderr)
         print(
-            "Stopped. If changes started, review the journal and scan again before retrying.",
+            "Stopped. Keep the latest backup and action log if changes already started.",
             file=sys.stderr,
         )
         return 1
     except KeyboardInterrupt, EOFError:
-        print("Cancelled. If changes started, review the journal and scan again.", file=sys.stderr)
+        print("Cancelled. Keep the latest backup if changes already started.", file=sys.stderr)
         return 130

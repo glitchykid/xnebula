@@ -91,7 +91,7 @@ class BridgeTests(unittest.TestCase):
 
     def test_unknown_protected_or_invalid_targets_cannot_produce_a_script(self):
         for item in (
-            Package("Microsoft.WindowsStore", "store_1", "installed"),
+            Package("Microsoft.SecHealthUI", "security_1", "installed"),
             Package(NEWS.name, NEWS.full_name, "installed", True),
             Package(NEWS.name, "", "installed"),
             Package(NEWS.name, NEWS.full_name, "bad"),
@@ -118,9 +118,11 @@ function Get-AppxPackage {
     if (-not $script:removed -or $script:keep) {
         [PSCustomObject]@{Name='Microsoft.BingNews'; Version='1.0';
             PackageFullName='Microsoft.BingNews_1_x64__publisher'; IsBundle=$true;
+            Publisher='CN=Microsoft Corporation'; PublisherId='publisher';
             NonRemovable=$script:protected; IsFramework=$false; IsResourcePackage=$false}
         [PSCustomObject]@{Name='Microsoft.BingNews'; PackageFullName='child';
             Version='1.0'; IsBundle=$false; NonRemovable=$false;
+            Publisher='CN=Microsoft Corporation'; PublisherId='publisher';
             IsFramework=$false; IsResourcePackage=$false}
     }
 }
@@ -152,6 +154,63 @@ function Remove-AppxProvisionedPackage {
 
 @unittest.skipUnless(sys.platform == "win32", "Requires built-in Windows PowerShell")
 class PowerShellIntegrationTests(unittest.TestCase):
+    def test_shared_frameworks_are_protected_without_blocking_apps_with_resource_packs(self):
+        from xnebula.core import available_apps
+        from xnebula.windows import parse_inventory
+
+        extra = r"""
+$script:originalAppx = (Get-Item Function:\Get-AppxPackage).ScriptBlock
+function Get-AppxPackage {
+    param([switch]$AllUsers, $PackageTypeFilter, $ErrorAction)
+    if ($PackageTypeFilter -notcontains 'Framework') { throw 'Framework inventory was omitted' }
+    & $script:originalAppx -AllUsers -PackageTypeFilter $PackageTypeFilter
+    [PSCustomObject]@{Name='Microsoft.OtherSharedFramework'; PackageFullName='framework';
+        Publisher='CN=Microsoft Corporation'; PublisherId='publisher';
+        IsFramework=$true; IsResourcePackage=$false; NonRemovable=$false}
+    [PSCustomObject]@{Name='Microsoft.BingNews'; PackageFullName='resource';
+        Publisher='CN=Microsoft Corporation'; PublisherId='publisher';
+        IsFramework=$false; IsResourcePackage=$true; NonRemovable=$true}
+}
+function Get-AppxProvisionedPackage {
+    param([switch]$Online, $ErrorAction)
+    [PSCustomObject]@{DisplayName='Microsoft.OtherSharedFramework'; PackageName='shared_publisher'}
+}
+"""
+        apps = available_apps(parse_inventory(bridge()._run(STUBS + extra + INVENTORY)))
+        self.assertEqual([app.id for app in apps], ["news"])
+
+    def test_force_close_only_targets_processes_inside_the_selected_app(self):
+        stubs = STUBS.replace(
+            "IsBundle=$true;", "IsBundle=$true; InstallLocation='C:\\XNebulaTest\\App';"
+        )
+        extra = r"""
+$script:closed = @()
+function Get-Process {
+    param($ErrorAction)
+    [PSCustomObject]@{Id=101; Path='C:\XNebulaTest\App\app.exe'}
+    [PSCustomObject]@{Id=202; Path='C:\XNebulaTest\App-Other\app.exe'}
+    [PSCustomObject]@{Id=303; Path=$null}
+}
+function Stop-Process {
+    param($Id, [switch]$Force, $ErrorAction)
+    if ($Id -ne 101 -or -not $Force) { throw 'Unrelated process was targeted' }
+    $script:closed += $Id
+}
+function Remove-AppxPackage {
+    param($Package, [switch]$AllUsers, $Confirm, $ErrorAction)
+    if ($script:closed.Count -ne 1 -or -not $AllUsers) { throw 'Expected selected app to close' }
+    $script:removed = $true
+}
+"""
+        self.assertEqual(bridge()._run(stubs + extra + removal_script(NEWS)), "ok")
+
+    def test_non_microsoft_publishers_are_not_offered_for_removal(self):
+        from xnebula.core import available_apps
+        from xnebula.windows import parse_inventory
+
+        stubs = STUBS.replace("CN=Microsoft Corporation", "CN=Another Vendor")
+        self.assertEqual(available_apps(parse_inventory(bridge()._run(stubs + INVENTORY))), [])
+
     def test_inventory_prefers_bundle_and_includes_provisioning(self):
         from xnebula.windows import parse_inventory
 

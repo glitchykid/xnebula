@@ -1,39 +1,37 @@
-# Policy reference
+# Windows integration reference
 
-Microsoft's current policy documentation and the installed Windows ADMX definitions are the source for registry mappings. Paths below are relative to `Software\Policies\Microsoft\Windows`.
+The main privacy action applies supported settings rather than attempting to disable every Windows facility indiscriminately. Most policies require Pro/Enterprise/Education; settings unavailable on an edition/build are reported. Required diagnostics remain enabled on Pro. On supported Enterprise/Education editions, the diagnostic level is set to zero. Domain/MDM management can override local settings.
 
-| Control | Hive / subkey | Value | Target |
-| --- | --- | --- | --- |
-| Advertising ID | HKLM / AdvertisingInfo | DisabledByGroupPolicy | DWORD 1 |
-| Optional diagnostics | HKLM / DataCollection | AllowTelemetry | DWORD 1; retain existing 0 |
-| Tailored experiences | HKCU / CloudContent | DisableTailoredExperiencesWithDiagnosticData | DWORD 1 |
-| Settings suggestions | HKCU / CloudContent | DisableWindowsSpotlightOnSettings | DWORD 1; Enterprise/Education |
-| Consumer suggestions | HKLM / CloudContent | DisableWindowsConsumerFeatures | DWORD 1; Enterprise/Education |
-| Activity feed | HKLM / System | EnableActivityFeed | DWORD 0 |
-| Activity publishing | HKLM / System | PublishUserActivities | DWORD 0 |
-| Activity upload | HKLM / System | UploadUserActivities | DWORD 0 |
-| Location | HKLM / LocationAndSensors | DisableLocation | DWORD 1 |
-| Recall snapshots | HKLM / WindowsAI | DisableAIDataAnalysis | DWORD 1; available updated Recall only |
-| Background apps | HKLM / AppPrivacy | LetAppsRunInBackground and exception lists | Retain existing default; selected families in MULTI_SZ deny list |
-| Storage Sense | HKLM / StorageSense | AllowStorageSenseGlobal | DWORD 1 |
-| Temporary cleanup | HKLM / StorageSense | AllowStorageSenseTemporaryFilesCleanup | DWORD 1 |
-| Cleanup schedule | HKLM / StorageSense | ConfigStorageSenseGlobalCadence | DWORD 0 (low space) |
-| Downloads / Recycle Bin | HKLM / StorageSense | ConfigStorageSenseDownloadsCleanupThreshold / ConfigStorageSenseRecycleBinCleanupThreshold | DWORD 0 by default, configurable 0–365 |
-| Local cloud content | HKLM / StorageSense | ConfigStorageSenseCloudContentDehydrationThreshold | DWORD 0 |
+| Feature | Windows integration | Scope |
+| --- | --- | --- |
+| Microsoft app removal | Get-AppxPackage / Remove-AppxPackage -AllUsers, plus online provisioning removal | Existing/new accounts |
+| Optional services | Win32_Service, service manager startup controls, Stop-Service / Start-Service | Machine |
+| Advertising ID | AdvertisingInfo / DisabledByGroupPolicy | Machine |
+| Diagnostic data | DataCollection / AllowTelemetry | Machine |
+| Tailored experiences | CloudContent / DisableTailoredExperiencesWithDiagnosticData | Current account |
+| Consumer suggestions | CloudContent consumer/Spotlight policies | Edition-dependent; machine/current account |
+| Activity publishing/upload | System / EnableActivityFeed, PublishUserActivities, UploadUserActivities | Machine |
+| Location | LocationAndSensors / DisableLocation | Machine |
+| Packaged-app access | AppPrivacy / LetAppsAccessCamera, Microphone, Contacts, Calendar, Email, CallHistory, Messaging, Tasks, AccountInfo | Machine |
+| App diagnostics/background | AppPrivacy / LetAppsGetDiagnosticInfo, LetAppsRunInBackground | Machine |
+| Speech | Software\Policies\Microsoft\InputPersonalization / AllowInputPersonalization | Machine |
+| Clipboard sync | System / AllowCrossDeviceClipboard | Machine |
+| Recall snapshots | WindowsAI / DisableAIDataAnalysis, after feature/build checks | Machine |
+| Animations | SystemParametersInfoW preference flags and Explorer Advanced / TaskbarAnimations | Current account |
+| Edge | Signed vendor uninstall; bounded ownership/access and deletion fallback | Machine/current account installation |
 
-Policy commands report unsupported editions. Writing the expected registry value does not prove every component applied the policy; sign out/restart and inspect effective Windows settings. Organization management may override local values.
+Privacy paths are below `Software\Policies\Microsoft\Windows` except where shown. Packaged-app access is force-denied with DWORD 2, with existing allow/user-control exception lists cleared so they cannot override the chosen protection. Browser/desktop app permissions are not universally controlled by these packaged-app policies.
 
-Official sources checked 2026-10-26:
+Windows app discovery checks Microsoft publisher metadata and protects frameworks, resources, SystemApps, the terminal host, Windows Security, sign-in/shell components, and runtimes. Edge's WebView2 runtime is excluded. Service selection is restricted to the documented optional catalog, with active dependency checks before each change.
 
-- [Privacy policies](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy)
-- [Experience policies and edition restrictions](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience)
-- [Diagnostics policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-system#allowtelemetry)
-- [Location policies](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-admx-sensors)
-- [Windows AI and Recall](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-windowsai)
-- [Storage Sense](https://learn.microsoft.com/en-us/windows/configuration/storage/storage-sense)
-- [Startup registry locations](https://support.microsoft.com/en-au/windows/experience/startup-boot/configure-startup-applications-in-windows)
-- [Appx removal](https://learn.microsoft.com/en-us/powershell/module/appx/remove-appxpackage?view=windowsserver2025-ps)
-- [Provisioning removal](https://learn.microsoft.com/en-us/powershell/module/dism/remove-appxprovisionedpackage?view=windowsserver2025-ps)
-- [Python winreg](https://docs.python.org/3.15/library/winreg.html)
+Official references:
 
-Windows PowerShell 5.1 is used as the OS-native adapter, even when the caller uses a newer PowerShell host. Runtime application code uses Python's standard library only.
+- [Get-AppxPackage](https://learn.microsoft.com/en-us/powershell/module/appx/get-appxpackage?view=windowsserver2025-ps), [Remove-AppxPackage](https://learn.microsoft.com/en-us/powershell/module/appx/remove-appxpackage?view=windowsserver2025-ps), [provisioning removal](https://learn.microsoft.com/en-us/powershell/module/dism/remove-appxprovisionedpackage?view=windowsserver2025-ps)
+- [Windows privacy policies](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-privacy), [experience policies](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-experience), [diagnostic policy](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-system#allowtelemetry)
+- [Windows AI/Recall policies](https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-windowsai)
+- [Win32_Service](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-service), [Set-Service](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-service?view=powershell-5.1)
+- [SystemParametersInfoW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfow)
+- [Edge uninstall policy and regional limitations](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-update-policies#uninstall)
+- [takeown](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/takeown), [icacls](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls), [Remove-Item](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/remove-item?view=powershell-5.1)
+
+Edge force deletion is a file-removal fallback, not Microsoft's supported regional uninstall policy. It does not promise clean application registration removal or persistence across Windows updates. All recursive file operations are restricted to a verified Edge installation root; reparse points cause refusal.

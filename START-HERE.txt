@@ -1,30 +1,43 @@
-XNebula for Windows 11 x64
+XNebula - Windows 11 x64
 
-1. Extract the entire ZIP to a folder you can write to (for example Documents).
-2. Double-click Start-XNebula.cmd to open the terminal menu.
-3. For system-wide scans or changes, use Start-XNebula-Admin.cmd and accept
-   Windows' administrator prompt. Opening the app does not apply changes.
+Extract the entire ZIP. Open Start-XNebula-Admin.cmd and accept Windows'
+administrator prompt. Python is included; no installation or network is needed.
+Keep .runtime, src, and scripts with the launchers.
 
-Python is included. No Python installation, pip, Git, or network connection
-is needed to start the portable release. Keep all extracted files together.
+Windows PowerShell opens with a black background and colored messages.
 
-Choose a menu number, review the preview, and type APPLY only when ready.
-Enter returns from a preview; 0 exits the menu.
+1  Remove Windows apps       2  Disable optional services
+3  Apply privacy settings    4  Disable Windows animations
+5  Force uninstall Edge      6  Restore a backup
+0  Exit
 
-To uninstall apps, choose menu option 2, then select app numbers such as
-1 3 5, 1,3,5, or 2-4. Choose 9 (Select All) to select every supported app.
-Review the selected names and removal preview before typing APPLY.
-At the app picker, 0 or Enter cancels; invalid numbers let you try again.
+Choose numbers, commas, or ranges in selection lists (1,3-5). Select All
+chooses every displayed item. Review effects, then type APPLY to proceed.
+Enter or 0 cancels selection. Opening the app makes no system changes.
+
+All-app removal includes detected removable Microsoft packages such as Store,
+Photos, Xbox, and Copilot. Core Windows components and third-party programs
+are excluded. Edge has its own force-removal action. Save your work first:
+selected apps can close, and removed app data is not backed up.
+
+Read service effects: Select All can disable printing, search indexing, Xbox,
+location, and other optional features. Privacy changes can block camera,
+microphone, background notifications, and speech features.
+
+Edge removal tries its signed uninstaller, then can force-delete its validated
+installation files. WebView2 and browser profiles are excluded. Reinstall Edge
+to recover it; force deletion can leave a registration entry or be undone by updates.
+
+Backups are in .xnebula\logs. Restore them by number in menu option 6.
+Backups restore settings/services, not removed apps, files, or Recall snapshots.
 
 PowerShell commands also work:
   .\Start-XNebula.cmd --help
-  .\Start-XNebula.cmd privacy list
-  .\Start-XNebula-Admin.cmd scan
+  .\Start-XNebula-Admin.cmd remove all --apply
+  .\Start-XNebula-Admin.cmd services disable all --apply
+  .\Start-XNebula-Admin.cmd privacy set all --apply
+  .\Start-XNebula-Admin.cmd animations disable --apply
+  .\Start-XNebula-Admin.cmd edge remove --apply
 
-Backups and reports are in .xnebula\logs inside the extracted XNebula folder.
-See README.md for restoration, Windows edition restrictions, and limitations.
-
-Update: extract a newer ZIP into a new folder. Keep the old .xnebula folder
-and any saved profiles; copy them to the new folder if you want to use them.
-Uninstall: remove the extracted app folder after keeping any backups you need.
-Removing the app folder does not undo Windows settings already applied.
+Update by extracting a new release into a new folder; keep your old backups.
+Deleting XNebula's folder does not undo Windows settings. See README.md.

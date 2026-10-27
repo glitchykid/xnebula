@@ -4,8 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from xnebula.registry import WindowsRegistry
-from xnebula.settings import SETTINGS, STARTUP_KEYS, RegistryValue
-from xnebula.windows import BackendError
+from xnebula.settings import SETTINGS, RegistryValue
 
 
 class FakeWinreg:
@@ -70,18 +69,6 @@ class RegistryTests(unittest.TestCase):
         self.registry.api.values.clear()
         self.registry.write(SETTINGS["location"].target, None)
 
-    def test_startup_includes_both_machine_views_and_current_user(self):
-        for hive, key in STARTUP_KEYS.values():
-            self.registry.api.values[(hive, key)] = {
-                "Example": ("example.exe", 1),
-                "": ("ignored", 1),
-            }
-        self.assertEqual(
-            set(self.registry.startup()), {"user:Example", "machine:Example", "machine32:Example"}
-        )
-        self.registry.api.values.clear()
-        self.assertEqual(self.registry.startup(), {})
-
     def test_initialization_binds_backup_to_machine_and_account(self):
         api = FakeWinreg()
         api.values[("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")] = {
@@ -112,11 +99,3 @@ class RegistryTests(unittest.TestCase):
             ):
                 self.registry.bridge._run.return_value = enabled
                 self.assertEqual(self.registry.recall_available, expected)
-
-    def test_background_inventory_validates_shapes(self):
-        self.registry.bridge._run.return_value = '["Example_publisher"]'
-        self.assertEqual(self.registry.background_apps(), ["Example_publisher"])
-        for payload in ("", "null", "{}", "[1]", '[""]'):
-            self.registry.bridge._run.return_value = payload
-            with self.subTest(payload=payload), self.assertRaises(BackendError):
-                self.registry.background_apps()
