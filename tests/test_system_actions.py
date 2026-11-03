@@ -20,6 +20,7 @@ from xnebula.services import (
     plan_services,
     restore_services,
 )
+from xnebula.settings import RegistryValue
 from xnebula.windows import BackendError
 
 
@@ -137,6 +138,44 @@ class AnimationTests(unittest.TestCase):
             path.write_text(json.dumps(document))
             with self.assertRaises(ValueError):
                 restore_animations(path, manager, Path(directory))
+
+    def test_restore_rejects_later_edits_to_originally_disabled_effects(self):
+        for flag in ANIMATION_FLAGS:
+            for apply in (False, True):
+                with self.subTest(effect=flag.id, apply=apply):
+                    manager = self.manager()
+                    manager.state.values[flag.id] = False
+                    with (
+                        tempfile.TemporaryDirectory() as directory,
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        path = disable_animations(manager, Path(directory))
+                        manager.state.values[flag.id] = True
+                        manager.configure.reset_mock()
+                        with self.assertRaisesRegex(ValueError, "Restore conflict"):
+                            restore_animations(path, manager, Path(directory), apply=apply)
+                        manager.configure.assert_not_called()
+                        self.assertTrue(manager.state.values[flag.id])
+                        self.assertEqual(len(list(Path(directory).glob("animations-*.json"))), 1)
+
+    def test_restore_accepts_effects_already_returned_to_original_values(self):
+        manager = self.manager()
+        original = manager.state
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path = disable_animations(manager, Path(directory))
+            manager.state.values[ANIMATION_FLAGS[0].id] = True
+            self.assertTrue(restore_animations(path, manager, Path(directory)))
+            self.assertEqual(manager.state, original)
+
+    def test_restore_rejects_later_taskbar_edits(self):
+        manager = self.manager()
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path = disable_animations(manager, Path(directory))
+            manager.state = AnimationState(manager.state.values, RegistryValue(4, 2))
+            manager.configure.reset_mock()
+            with self.assertRaisesRegex(ValueError, "Restore conflict"):
+                restore_animations(path, manager, Path(directory))
+            manager.configure.assert_not_called()
 
 
 class EdgeTests(unittest.TestCase):

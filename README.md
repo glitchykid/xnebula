@@ -11,9 +11,11 @@ A focused Windows 11 debloating app that runs in **Windows PowerShell**. The com
 
 Every change previews first. Type `APPLY` to proceed or press Enter to return. App and service lists use a checklist: **Up/Down** moves the cursor, **Space** toggles an item, **A** selects or clears all, **Enter** confirms, and **Esc** goes back. Only names are shown. Long lists scroll with the cursor. With redirected input, a numbered fallback accepts numbers, ranges, and `all`.
 
+Mistyping `APPLY` in the menu keeps your selection and asks again. Terminals without cursor controls, including `TERM=dumb`, use the numbered selector; `TERM=dumb` also disables color codes.
+
 ## Download and start
 
-1. Download [xnebula-0.3.1-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.1/xnebula-0.3.1-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+1. Download [xnebula-0.3.2-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.2/xnebula-0.3.2-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
 2. Extract the **entire ZIP** into a writable folder, such as Documents.
 3. Open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. `Start-XNebula.cmd` opens without elevation, but system-wide inventory and changes require administrator rights.
 
@@ -137,4 +139,4 @@ START-HERE.txt     portable quick start
 pyproject.toml     package, tooling, and coverage configuration
 ```
 
-See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.1 release notes](docs/releases/v0.3.1.md). `AGENTS.md` remains unchanged.
+See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.2 release notes](docs/releases/v0.3.2.md). `AGENTS.md` remains unchanged.

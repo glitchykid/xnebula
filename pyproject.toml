@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xnebula"
-version = "0.3.1"
+version = "0.3.2"
 description = "Remove Windows apps, disable optional services, and apply privacy and animation settings"
 readme = "README.md"
 requires-python = ">=3.15"

@@ -101,6 +101,9 @@ def restore_animations(path, manager, directory, *, apply=True):
         return False
     if current.taskbar not in (before.taskbar, after.taskbar):
         raise ValueError("Restore conflict: taskbar settings changed after the backup.")
+    for flag in ANIMATION_FLAGS:
+        if current.values[flag.id] not in (before.values[flag.id], after.values[flag.id]):
+            raise ValueError(f"Restore conflict: {flag.id} settings changed after the backup.")
     print("Restore the previous Windows animation preferences for this account.")
     if apply:
         apply_animation_state(manager, current, before, directory)

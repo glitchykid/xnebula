@@ -4,7 +4,7 @@
 2. Keep the backup path printed before settings/service/animation changes. Menu option **6** lists backups automatically, newest-first.
 3. Restore overlapping changes newest-first. The app skips already-restored values and refuses conflicting later edits. Restoring creates a new backup for the recovery operation.
 4. Service backups preserve startup mode, delayed automatic startup, and running/stopped state. Restore order reverses the disabling order so dependencies can come back first.
-5. Animation backups capture all supported preference flags plus the old taskbar value, including an absent value. Restoration changes the account running the app; sign out if taskbar behavior has not refreshed.
+5. Animation backups capture all supported preference flags plus the old taskbar value, including an absent value. Restoration refuses later conflicting edits to individual effects as well as the taskbar, before changing anything. Restoration changes the account running the app; sign out if taskbar behavior has not refreshed.
 6. Failed or interrupted actions can leave partial changes. Keep the automatic JSONL log and check Windows before retrying. App removal attempts remaining packages while reporting each failure; other operation groups stop at the failure.
 
 Backups are bound to machine/account identities and restricted to known registry/service/animation targets. Older registry snapshots remain accepted for recognized targets even though their original feature screens were removed.

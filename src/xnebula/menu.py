@@ -7,7 +7,7 @@ from pathlib import Path
 
 from xnebula import __version__
 from xnebula.checklist import select_items
-from xnebula.console import paint
+from xnebula.console import enable_virtual_terminal, paint
 from xnebula.core import CATALOG
 from xnebula.services import SERVICES
 from xnebula.windows import BackendError
@@ -52,7 +52,7 @@ def choose_items(rows, prefix, title):
     if not rows:
         print("Nothing available to change.")
         return None
-    if sys.stdin.isatty() and sys.stdout.isatty():
+    if sys.stdin.isatty() and sys.stdout.isatty() and enable_virtual_terminal():
         indexes = select_items([name for _, name, _ in rows])
         return [*prefix, *(rows[index][0] for index in indexes)] if indexes else None
     for number, (_, name, _) in enumerate(rows, start=1):
@@ -167,11 +167,19 @@ def run_menu(
                     continue
                 if not command or call(invoke, command) != 0 or not can_apply():
                     continue
-                confirmation = input(
-                    paint("Preview only. Type APPLY to continue, or Enter to go back: ", "warning")
-                )
-                if confirmation.strip() == "APPLY":
-                    call(invoke, [*command, "--apply", "--yes"])
+                while True:
+                    confirmation = input(
+                        paint(
+                            "Preview only. Type APPLY to continue, or Enter to go back: ",
+                            "warning",
+                        )
+                    ).strip()
+                    if not confirmation:
+                        break
+                    if confirmation == "APPLY":
+                        call(invoke, [*command, "--apply", "--yes"])
+                        break
+                    print(paint("Type APPLY exactly, or press Enter to cancel.", "warning"))
             except (BackendError, OSError, ValueError) as error:
                 print(paint(f"[ERROR] {error}", "error"))
     except EOFError, KeyboardInterrupt:
