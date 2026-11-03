@@ -46,7 +46,7 @@ def preview_changes(changes):
             print(f"  - {description} [{scope}]")
 
 
-def handle(args, registry=None, *, services=None, animations=None, on_preview=None):
+def handle(args, registry=None, *, services=None, animations=None, on_preview=None, on_plan=None):
     if args.command == "privacy" and args.action == "list":
         for key, option in SETTINGS.items():
             print(f"{key:22} {option.effect}")
@@ -57,22 +57,32 @@ def handle(args, registry=None, *, services=None, animations=None, on_preview=No
             raise ValueError("Invalid backup file.")
         kind = document.get("kind")
         if kind in ("services", "animations"):
-            from xnebula.animations import WindowsAnimations, restore_animations
-            from xnebula.services import WindowsServices, restore_services
+            from xnebula.animations import (
+                WindowsAnimations,
+                apply_animation_state,
+                plan_animation_restore,
+            )
+            from xnebula.services import WindowsServices, apply_service_changes, restore_services
 
             if kind == "services":
                 manager = services if services is not None else WindowsServices()
-                operation = restore_services
+                changes = restore_services(args.backup, manager, args.log_dir, apply=False)
             else:
                 manager = (
                     animations if animations is not None else WindowsAnimations(registry=registry)
                 )
-                operation = restore_animations
-            changes = operation(args.backup, manager, args.log_dir, apply=False)
+                changes = plan_animation_restore(args.backup, manager)
+            if on_plan is not None:
+                on_plan((kind, changes))
             if on_preview is not None:
                 on_preview(bool(changes))
             if args.apply and changes and confirm(args):
-                operation(args.backup, manager, args.log_dir)
+                if kind == "services":
+                    apply_service_changes(changes, manager, args.log_dir)
+                else:
+                    apply_animation_state(manager, *changes, args.log_dir)
+            elif args.apply and changes:
+                print("Cancelled. No changes made.")
             elif not args.apply:
                 print("Preview only. Add --apply to restore.")
             return 0
@@ -86,6 +96,8 @@ def handle(args, registry=None, *, services=None, animations=None, on_preview=No
         for reason in skipped:
             print(paint(f"[SKIP] {reason}", "warning"))
     preview_changes(changes)
+    if on_plan is not None:
+        on_plan(changes)
     if on_preview is not None:
         on_preview(len(changes))
     if not changes:

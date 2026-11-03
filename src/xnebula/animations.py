@@ -89,7 +89,7 @@ def disable_animations(manager, directory):
     return apply_animation_state(manager, before, after, directory)
 
 
-def restore_animations(path, manager, directory, *, apply=True):
+def plan_animation_restore(path, manager):
     document = read_snapshot(path, "animations", manager.identity)
     try:
         before, after = decode_state(document["before"]), decode_state(document["after"])
@@ -98,15 +98,22 @@ def restore_animations(path, manager, directory, *, apply=True):
     current = manager.read()
     if current == before:
         print("[OK] These animation settings are already restored.")
-        return False
+        return None
     if current.taskbar not in (before.taskbar, after.taskbar):
         raise ValueError("Restore conflict: taskbar settings changed after the backup.")
     for flag in ANIMATION_FLAGS:
         if current.values[flag.id] not in (before.values[flag.id], after.values[flag.id]):
             raise ValueError(f"Restore conflict: {flag.id} settings changed after the backup.")
     print("Restore the previous Windows animation preferences for this account.")
+    return current, before
+
+
+def restore_animations(path, manager, directory, *, apply=True):
+    plan = plan_animation_restore(path, manager)
+    if plan is None:
+        return False
     if apply:
-        apply_animation_state(manager, current, before, directory)
+        apply_animation_state(manager, *plan, directory)
     return True
 
 

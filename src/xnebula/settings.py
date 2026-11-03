@@ -294,10 +294,25 @@ def decode_value(value):
     return RegistryValue(kind, data)
 
 
+def target_identity(target):
+    # Registry key and value names are case-insensitive, including legacy startup entries.
+    return target.hive.casefold(), target.key.casefold(), target.name.casefold()
+
+
 def apply_changes(changes, registry, directory):
     # Validate the complete snapshot before creating backups or performing writes.
+    seen = set()
     for change in changes:
         validate_target(change.target)
+        identity = target_identity(change.target)
+        if identity in seen or not isinstance(change.label, str):
+            raise ValueError("Duplicate target or invalid label in changes.")
+        seen.add(identity)
+        for value in (change.before, change.after):
+            if value is not None:
+                if not isinstance(value, RegistryValue):
+                    raise ValueError("Invalid registry value in changes.")
+                decode_value(asdict(value))
         if registry.read(change.target) != change.before:
             raise ValueError(f"{change.label} changed since preview; preview again.")
     directory.mkdir(parents=True, exist_ok=True)
@@ -331,7 +346,11 @@ def apply_changes(changes, registry, directory):
 def restore_plan(path, registry):
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-        if document["schema"] != 1 or document["identity"] != registry.identity:
+        if (
+            type(document["schema"]) is not int
+            or document["schema"] != 1
+            or document["identity"] != registry.identity
+        ):
             raise ValueError("Backup is for a different machine/account or schema.")
         if not isinstance(document["changes"], list):
             raise ValueError("Invalid backup changes.")
@@ -339,9 +358,10 @@ def restore_plan(path, registry):
         for row in reversed(document["changes"]):
             target = Target(**row["target"])
             validate_target(target)
-            if target in seen or not isinstance(row["label"], str):
+            identity = target_identity(target)
+            if identity in seen or not isinstance(row["label"], str):
                 raise ValueError("Duplicate target or invalid label in backup.")
-            seen.add(target)
+            seen.add(identity)
             before, after = decode_value(row["before"]), decode_value(row["after"])
             current = registry.read(target)
             if current == before:

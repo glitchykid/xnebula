@@ -24,6 +24,17 @@ class EdgeInstallation:
     system: bool
 
 
+def valid_installation(item):
+    return (
+        isinstance(item, EdgeInstallation)
+        and isinstance(item.executable, str)
+        and bool(item.executable.strip())
+        and isinstance(item.installer, str)
+        and (not item.installer or bool(item.installer.strip()))
+        and type(item.system) is bool
+    )
+
+
 class WindowsEdge:
     def __init__(self, *, bridge=None):
         self.bridge = bridge if bridge is not None else WindowsBackend()
@@ -57,12 +68,7 @@ ConvertTo-Json -InputObject @($rows) -Depth 3 -Compress
             result = []
             for row in rows:
                 item = EdgeInstallation(**row)
-                if (
-                    not isinstance(item.executable, str)
-                    or not item.executable
-                    or not isinstance(item.installer, str)
-                    or type(item.system) is not bool
-                ):
+                if not valid_installation(item):
                     raise ValueError
                 result.append(item)
             return result
@@ -70,6 +76,8 @@ ConvertTo-Json -InputObject @($rows) -Depth 3 -Compress
             raise BackendError("Windows returned an invalid Microsoft Edge inventory.") from error
 
     def remove(self, item):
+        if not valid_installation(item):
+            raise BackendError("Invalid Microsoft Edge installation identity.")
         script = (
             payload(
                 {"executable": item.executable, "installer": item.installer, "system": item.system}

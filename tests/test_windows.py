@@ -103,6 +103,20 @@ class BridgeTests(unittest.TestCase):
         malicious = "'; throw 'injected'; #"
         self.assertNotIn(malicious, removal_script(Package(NEWS.name, malicious, "installed")))
 
+    def test_malformed_package_targets_fail_before_powershell_starts(self):
+        for item in (
+            None,
+            Package(NEWS.name, 123, "installed"),
+            Package(NEWS.name, [NEWS.full_name], "installed"),
+            Package(NEWS.name, "   ", "installed"),
+            Package(NEWS.name, NEWS.full_name, "installed", 0),
+            Package(NEWS.name, NEWS.full_name, "installed", None),
+        ):
+            with self.subTest(item=item), patch.object(WindowsBackend, "_run") as run:
+                with self.assertRaises(BackendError):
+                    bridge().remove(item)
+                run.assert_not_called()
+
 
 # These functions shadow native cmdlets in a child PowerShell process. No real
 # package is queried or removed. Parameter assertions exercise the production scripts.
@@ -154,6 +168,31 @@ function Remove-AppxProvisionedPackage {
 
 @unittest.skipUnless(sys.platform == "win32", "Requires built-in Windows PowerShell")
 class PowerShellIntegrationTests(unittest.TestCase):
+    def test_microsoft_publisher_prefix_impersonation_is_protected_and_cannot_be_removed(self):
+        from xnebula.core import available_apps
+        from xnebula.windows import parse_inventory
+
+        for publisher in ("CN=Microsoft Corporation Evil", "CN=Microsoft WindowsFake"):
+            with self.subTest(publisher=publisher):
+                stubs = STUBS.replace("CN=Microsoft Corporation", publisher)
+                rows = parse_inventory(bridge()._run(stubs + INVENTORY))
+                self.assertEqual(available_apps(rows), [])
+                with self.assertRaisesRegex(BackendError, "protected"):
+                    bridge()._run(stubs + removal_script(NEWS))
+
+    def test_microsoft_publisher_distinguished_names_remain_supported(self):
+        from xnebula.core import available_apps
+        from xnebula.windows import parse_inventory
+
+        for publisher in (
+            "CN=Microsoft Corporation, O=Microsoft Corporation",
+            "CN=Microsoft Windows",
+        ):
+            with self.subTest(publisher=publisher):
+                stubs = STUBS.replace("CN=Microsoft Corporation", publisher)
+                self.assertTrue(available_apps(parse_inventory(bridge()._run(stubs + INVENTORY))))
+                self.assertEqual(bridge()._run(stubs + removal_script(NEWS)), "ok")
+
     def test_shared_frameworks_are_protected_without_blocking_apps_with_resource_packs(self):
         from xnebula.core import available_apps
         from xnebula.windows import parse_inventory

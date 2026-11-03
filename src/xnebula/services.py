@@ -94,17 +94,23 @@ def plan_services(ids, states):
     current = {state.name: state for state in states if state.name in selected}
     for state in current.values():
         validate_state(state)
+    # SCM preserves casing but compares service names case-insensitively.
+    canonical = {name.casefold(): name for name in current}
+    dependencies = {
+        name: tuple(canonical.get(dep.casefold(), dep) for dep in state.dependents)
+        for name, state in current.items()
+    }
     # A running dependent outside this plan blocks disabling its parent.
     blocked = {
         name
-        for name, state in current.items()
-        if any(dep not in current for dep in state.dependents)
+        for name, dependents in dependencies.items()
+        if any(dep not in current for dep in dependents)
     }
     while True:
         expanded = blocked | {
             name
-            for name, state in current.items()
-            if any(dep in blocked for dep in state.dependents)
+            for name, dependents in dependencies.items()
+            if any(dep in blocked for dep in dependents)
         }
         if expanded == blocked:
             break
@@ -118,7 +124,7 @@ def plan_services(ids, states):
             raise ValueError("Unexpected circular service dependency; no changes started.")
         visiting.add(name)
         state = current[name]
-        for dependent in state.dependents:
+        for dependent in dependencies[name]:
             visit(dependent)
         visiting.remove(name)
         visited.add(name)
@@ -183,6 +189,11 @@ def restore_services(path, manager, directory, *, apply=True):
         if not isinstance(document["changes"], list):
             raise ValueError("Invalid service backup.")
         for row in reversed(document["changes"]):
+            for side in ("before", "after"):
+                if not isinstance(row[side], dict) or not isinstance(
+                    row[side].get("dependents", []), list
+                ):
+                    raise ValueError("Invalid service dependencies in backup.")
             before = ServiceState(
                 **{**row["before"], "dependents": tuple(row["before"].get("dependents", []))}
             )
@@ -254,6 +265,11 @@ ConvertTo-Json -InputObject @($rows) -Depth 4 -Compress
         try:
             rows = json.loads(self.bridge._run(script))
             if not isinstance(rows, list):
+                raise ValueError
+            if any(
+                not isinstance(row, dict) or not isinstance(row.get("dependents"), list)
+                for row in rows
+            ):
                 raise ValueError
             states = [
                 ServiceState(**{**row, "dependents": tuple(row["dependents"])}) for row in rows

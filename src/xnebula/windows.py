@@ -24,7 +24,7 @@ $protectedNames = @($allPackages | Where-Object {
     $_.InstallLocation -like ($env:SystemRoot + '\SystemApps\*')
 } | ForEach-Object { $_.Name })
 $microsoftPublishers = @('8wekyb3d8bbwe', 'cw5n1h2txyewy', '8xb3b82q0j6ny') + @(
-    $packages | Where-Object { $_.Publisher -match '^CN=Microsoft (Corporation|Windows)' } |
+    $packages | Where-Object { $_.Publisher -match '^CN=Microsoft (Corporation|Windows)(?:,|$)' } |
     ForEach-Object { $_.PublisherId }
 )
 $bundles = @($packages | Where-Object { $_.IsBundle } |
@@ -36,7 +36,7 @@ $rows = @(
         [PSCustomObject]@{
             name = $p.Name; full_name = $p.PackageFullName; kind = 'installed'
             protected = [bool](($protectedNames -contains $p.Name) -or
-                ($p.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)'))
+                ($p.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)(?:,|$)'))
         }
     }
     foreach ($p in @(Get-AppxProvisionedPackage -Online -ErrorAction Stop)) {
@@ -80,10 +80,16 @@ def parse_inventory(payload: str) -> list[Package]:
 
 
 def removal_script(item: Package) -> str:
+    if (
+        not isinstance(item, Package)
+        or type(item.protected) is not bool
+        or not isinstance(item.full_name, str)
+        or not item.full_name.strip()
+        or item.kind not in ("installed", "provisioned")
+    ):
+        raise BackendError("Invalid package identity.")
     if item.protected or not removable_name(item.name):
         raise BackendError("Refusing to remove a protected or unlisted package.")
-    if item.kind not in ("installed", "provisioned") or not item.full_name:
-        raise BackendError("Invalid package identity.")
     # A JSON payload is encoded as data, never treated as PowerShell source.
     payload = base64.b64encode(
         json.dumps({"name": item.name, "full": item.full_name}).encode()
@@ -102,7 +108,7 @@ if ($p.Count -eq 0) { throw 'Package changed since preview. Scan again.' }
 foreach ($match in $p) {
     if ($match.NonRemovable -or $match.IsFramework -or $match.IsResourcePackage -or
         $match.InstallLocation -like ($env:SystemRoot + '\SystemApps\*') -or
-        $match.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)') {
+        $match.Publisher -notmatch '^CN=Microsoft (Corporation|Windows)(?:,|$)') {
         throw 'Package is protected. No removal attempted.'
     }
 }

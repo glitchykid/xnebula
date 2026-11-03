@@ -10,6 +10,8 @@
 
 Backups are bound to machine/account identities and restricted to known registry/service/animation targets. Older registry snapshots remain accepted for recognized targets even though their original feature screens were removed.
 
+APPLY in the menu compares the current plan with the previously reviewed plan and refuses a changed plan. Service/animation recovery calculates its plan before typed confirmation and applies those captured values; replacing a backup file during that prompt does not switch the action to different values. State is rechecked before writing. Schema versions must be integers; invalid values, duplicate registry targets and malformed service dependencies are rejected before mutation. Windows registry value names and service dependency names are compared without case sensitivity where required.
+
 **App binaries, app data, Edge installation files, and deleted Recall snapshots are not in these backups.** Reinstall removed applications/Edge separately. Removing Store/App Installer may require original signed packages or Windows media for recovery. Forced Edge file removal can leave an installed-app entry, and updates can recreate the browser.
 
 Automated tests use fake Appx/service/browser cmdlets, intercepted native permission commands, and an in-memory Windows preference API. They exercise actual production PowerShell scripts without deleting host files or changing host services. Manual elevated disposable-VM testing remains necessary for:

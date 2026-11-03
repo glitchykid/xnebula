@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -13,9 +14,11 @@ from xnebula.animations import (
     restore_animations,
 )
 from xnebula.edge import EdgeInstallation, WindowsEdge
+from xnebula.recovery import save_snapshot
 from xnebula.services import (
     ServiceChange,
     ServiceState,
+    WindowsServices,
     apply_service_changes,
     plan_services,
     restore_services,
@@ -40,6 +43,16 @@ class MemoryServices:
 
 
 class ServiceTests(unittest.TestCase):
+    def test_native_service_inventory_rejects_non_array_dependencies(self):
+        bridge = Mock()
+        manager = WindowsServices(bridge=bridge, identity={"machine": "test", "user": "test"})
+        for invalid in ("RpcSs", {"RpcSs": True}, None, 1):
+            row = asdict(ServiceState("DiagTrack", "Auto", "Running"))
+            row["dependents"] = invalid
+            bridge._run.return_value = json.dumps([row])
+            with self.subTest(invalid=invalid), self.assertRaises(BackendError):
+                manager.inventory()
+
     def test_disable_all_skips_absent_services_and_protects_external_dependents(self):
         states = [
             ServiceState("DiagTrack", "Auto", "Running"),
@@ -64,6 +77,66 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(
             [change.before.name for change in changes], ["XblGameSave", "XblAuthManager"]
         )
+
+    def test_dependency_order_uses_case_insensitive_windows_service_names(self):
+        states = [
+            ServiceState("XblAuthManager", "Manual", "Running", dependents=("xblgamesave",)),
+            ServiceState("XblGameSave", "Manual", "Running"),
+        ]
+        changes, skipped = plan_services(["all"], states)
+        self.assertFalse(skipped)
+        self.assertEqual(
+            [change.before.name for change in changes], ["XblGameSave", "XblAuthManager"]
+        )
+
+    def test_dependency_cycles_are_rejected_even_when_service_casing_differs(self):
+        states = [
+            ServiceState("XblAuthManager", "Manual", "Running", dependents=("xblgamesave",)),
+            ServiceState("XblGameSave", "Manual", "Running", dependents=("XBLAUTHMANAGER",)),
+        ]
+        with self.assertRaisesRegex(ValueError, "circular"):
+            plan_services(["all"], states)
+
+    def test_external_dependency_block_propagates_through_case_insensitive_names(self):
+        states = [
+            ServiceState("XblAuthManager", "Manual", "Running", dependents=("xblgamesave",)),
+            ServiceState("XblGameSave", "Manual", "Running", dependents=("External",)),
+        ]
+        changes, skipped = plan_services(["all"], states)
+        self.assertEqual(changes, [])
+        self.assertEqual(len(skipped), 2)
+
+    def test_restore_rejects_invalid_dependency_containers_before_any_change(self):
+        before = ServiceState("DiagTrack", "Auto", "Running")
+        after = ServiceState("DiagTrack", "Disabled", "Stopped")
+        for invalid in ("RpcSs", {"RpcSs": True}, None, 1):
+            for field in ("before", "after"):
+                manager = MemoryServices([after])
+                with (
+                    self.subTest(invalid=invalid, field=field),
+                    tempfile.TemporaryDirectory() as directory,
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    row = asdict(ServiceChange(before, after))
+                    row[field]["dependents"] = invalid
+                    path = save_snapshot(
+                        "services", manager.identity, {"changes": [row]}, Path(directory)
+                    )
+                    with self.assertRaisesRegex(ValueError, "Invalid service"):
+                        restore_services(path, manager, Path(directory))
+                    self.assertEqual(manager.calls, [])
+
+    def test_restore_accepts_older_backup_without_dependency_fields(self):
+        before = ServiceState("DiagTrack", "Auto", "Running")
+        after = ServiceState("DiagTrack", "Disabled", "Stopped")
+        manager = MemoryServices([after])
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            row = asdict(ServiceChange(before, after))
+            del row["before"]["dependents"]
+            del row["after"]["dependents"]
+            path = save_snapshot("services", manager.identity, {"changes": [row]}, Path(directory))
+            restore_services(path, manager, Path(directory))
+            self.assertEqual(manager.states[before.name], before)
 
     def test_apply_and_restore_preserve_startup_delayed_auto_and_running_state(self):
         original = ServiceState("DiagTrack", "Auto", "Running", delayed=True)
@@ -115,6 +188,48 @@ class AnimationTests(unittest.TestCase):
             self.assertTrue(all(value is False for value in manager.state.values.values()))
             restore_animations(backup, manager, Path(directory))
             self.assertEqual(manager.state, original)
+
+    def test_restore_planning_reads_backup_without_changing_preferences(self):
+        from xnebula.animations import plan_animation_restore
+
+        manager = self.manager()
+        original = manager.state
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path = disable_animations(manager, Path(directory))
+            disabled = manager.state
+            manager.configure.reset_mock()
+            self.assertEqual(plan_animation_restore(path, manager), (disabled, original))
+            manager.configure.assert_not_called()
+            self.assertEqual(len(list(Path(directory).glob("animations-*.json"))), 1)
+            manager.state = original
+            self.assertIsNone(plan_animation_restore(path, manager))
+
+    def test_captured_animation_restore_is_not_replaced_by_later_backup_edits(self):
+        from xnebula.animations import apply_animation_state, plan_animation_restore
+
+        manager = self.manager()
+        original = manager.state
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path = disable_animations(manager, Path(directory))
+            current, target = plan_animation_restore(path, manager)
+            document = json.loads(path.read_text())
+            document["before"] = document["after"]
+            path.write_text(json.dumps(document))
+            apply_animation_state(manager, current, target, Path(directory))
+            self.assertEqual(manager.state, original)
+
+    def test_captured_animation_restore_rejects_state_changed_after_planning(self):
+        from xnebula.animations import apply_animation_state, plan_animation_restore
+
+        manager = self.manager()
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path = disable_animations(manager, Path(directory))
+            current, target = plan_animation_restore(path, manager)
+            manager.state = AnimationState(manager.state.values, RegistryValue(4, 2))
+            manager.configure.reset_mock()
+            with self.assertRaisesRegex(ValueError, "changed since preview"):
+                apply_animation_state(manager, current, target, Path(directory))
+            manager.configure.assert_not_called()
 
     def test_backup_exists_before_any_animation_is_changed(self):
         manager = self.manager()

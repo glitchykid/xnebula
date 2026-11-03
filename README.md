@@ -25,7 +25,7 @@ Mistyping `APPLY` in the menu keeps your selection and asks again. Terminals wit
 
 ## Download and start
 
-1. Download [xnebula-0.4.0-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.4.0/xnebula-0.4.0-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+1. Download [xnebula-0.4.1-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.4.1/xnebula-0.4.1-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
 2. Extract the **entire ZIP** into a writable folder, such as Documents.
 3. Open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. `Start-XNebula.cmd` opens without elevation, but system-wide inventory and changes require administrator rights.
 
@@ -107,6 +107,8 @@ Backups are bound to machine ID and account SID and can contain local identifier
 
 Changes are not an atomic transaction. Failures, interruptions, or timeouts can leave earlier work applied; an unfinished/uncertain journal action requires checking Windows state before retrying. Native deployment work may continue after a CLI timeout. Settings and service operations stop on errors; app package removal attempts remaining selected packages and reports failures.
 
+Menu confirmation is bound to the reviewed plan. If relevant state changes before APPLY, the action stops and requires a new preview. Standalone app/Edge commands recheck inventory after typed confirmation. Settings, services and animations check captured state before writing; service/animation recovery retains the computed plan if the backup file is replaced while confirmation is open. Already-disabled animations need no confirmation or new backup. Registry changes reject duplicate targets, invalid values and unsupported schema types before writing. These checks reduce unintended changes; they do not make Windows mutations atomic. See the [runtime logic review](docs/reviews/logic-review-2026-11-03.md).
+
 To update, extract the newer release into a new folder and retain/copy `.xnebula` backups as needed. To uninstall XNebula, retain needed backups and remove the extracted folder. Removing XNebula does not undo Windows changes. The previous profile, startup, storage-cleanup, background-picker, standalone Recall, and reports commands have been removed; Recall/background privacy controls are part of the privacy action and logging remains automatic.
 
 Exit codes: `0` preview/completed/cancelled, `1` failure (including partial app removal), `2` invalid command line, `130` interrupted/closed input. No arguments open the menu in a terminal; redirected input displays help. `menu` explicitly opens the menu.
@@ -151,4 +153,4 @@ START-HERE.txt     portable quick start
 pyproject.toml     package, tooling, and coverage configuration
 ```
 
-See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.4.0 release notes](docs/releases/v0.4.0.md). `AGENTS.md` remains unchanged.
+See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.4.1 release notes](docs/releases/v0.4.1.md). `AGENTS.md` remains unchanged.

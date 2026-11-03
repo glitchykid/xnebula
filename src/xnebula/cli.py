@@ -2,10 +2,16 @@
 
 import argparse
 import sys
+from copy import deepcopy
 from dataclasses import asdict
 
 from xnebula import __version__, settings_cli
-from xnebula.animations import WindowsAnimations, disable_animations
+from xnebula.animations import (
+    ANIMATION_FLAGS,
+    AnimationState,
+    WindowsAnimations,
+    apply_animation_state,
+)
 from xnebula.console import paint
 from xnebula.core import CATALOG, available_apps, build_plan, removable_name, selected_apps
 from xnebula.edge import WindowsEdge
@@ -62,7 +68,7 @@ def apply_requested(args):
     return True
 
 
-def remove_apps(args, backend, on_preview=None):
+def remove_apps(args, backend, on_preview=None, on_plan=None):
     packages = backend.inventory()
     if args.command == "scan":
         apps = available_apps(packages)
@@ -71,6 +77,8 @@ def remove_apps(args, backend, on_preview=None):
         print(f"{len(apps)} removable Windows apps detected. Essential components are excluded.")
         return 0
     plan = build_plan(args.apps, packages)
+    if on_plan is not None:
+        on_plan(plan)
     if on_preview is not None:
         on_preview(len(plan))
     print(paint("Preview: remove Windows apps for all existing and new accounts", "title"))
@@ -96,6 +104,8 @@ def remove_apps(args, backend, on_preview=None):
     )
     if not apply_requested(args):
         return 0
+    if build_plan(args.apps, backend.inventory()) != plan:
+        raise ValueError("App inventory changed since preview; preview again.")
     journal = Journal(args.log_dir)
     failed = 0
     try:
@@ -132,14 +142,24 @@ def main(
     animations=None,
     edge=None,
     on_preview=None,
+    on_plan=None,
 ):
     arguments = parser()
     args = arguments.parse_args(argv)
 
     pending = [True]
+    reviewed = [None]
 
     def invoke(command):
         pending[0] = True
+
+        def check_plan(plan):
+            if "--apply" in command:
+                if plan != reviewed[0]:
+                    raise ValueError("State changed since preview; review the action again.")
+            else:
+                reviewed[0] = deepcopy(plan)
+
         return main(
             command,
             backend=backend,
@@ -148,6 +168,7 @@ def main(
             animations=animations,
             edge=edge,
             on_preview=lambda count: pending.__setitem__(0, bool(count)),
+            on_plan=check_plan,
         )
 
     if args.command == "menu" or (args.command is None and sys.stdin.isatty()):
@@ -168,7 +189,12 @@ def main(
             return 0
         if args.command in ("privacy", "restore"):
             return settings_cli.handle(
-                args, registry, services=services, animations=animations, on_preview=on_preview
+                args,
+                registry,
+                services=services,
+                animations=animations,
+                on_preview=on_preview,
+                on_plan=on_plan,
             )
         if args.command == "services":
             if args.action == "list":
@@ -177,6 +203,8 @@ def main(
                 return 0
             manager = services if services is not None else WindowsServices()
             changes, skipped = plan_services(args.ids or ["all"], manager.inventory())
+            if on_plan is not None:
+                on_plan(changes)
             if on_preview is not None:
                 on_preview(len(changes))
             print(paint(f"Preview: disable {len(changes)} optional service(s)", "title"))
@@ -193,14 +221,21 @@ def main(
         if args.command == "animations":
             manager = animations if animations is not None else WindowsAnimations(registry=registry)
             state = manager.read()
+            after = AnimationState(
+                {flag.id: False for flag in ANIMATION_FLAGS}, RegistryValue(4, 0)
+            )
+            if on_plan is not None:
+                on_plan(state)
             if on_preview is not None:
-                on_preview(any(state.values.values()) or state.taskbar != RegistryValue(4, 0))
+                on_preview(state != after)
             print(paint("Preview: turn off Windows animations for this account", "title"))
             print("Includes window minimize/restore, taskbar, menus, tooltips, and fades.")
             print("Apps with their own animation settings may ignore Windows preferences.")
             print(f"Currently enabled: {sum(state.values.values())} Windows effect group(s).")
-            if apply_requested(args):
-                disable_animations(manager, args.log_dir)
+            if state == after:
+                print("[OK] Windows animations are already disabled.")
+            elif apply_requested(args):
+                apply_animation_state(manager, state, after, args.log_dir)
                 print(
                     paint(
                         "[OK] Windows animations disabled. Sign out if the taskbar still animates.",
@@ -211,6 +246,8 @@ def main(
         if args.command == "edge":
             manager = edge if edge is not None else WindowsEdge()
             installations = manager.inventory()
+            if on_plan is not None:
+                on_plan(installations)
             if on_preview is not None:
                 on_preview(len(installations))
             if not installations:
@@ -230,6 +267,8 @@ def main(
                 print("  - Microsoft Edge: " + ("machine-wide" if item.system else "this account"))
             if not apply_requested(args):
                 return 0
+            if manager.inventory() != installations:
+                raise ValueError("Edge installations changed since preview; preview again.")
             journal = Journal(args.log_dir)
             try:
                 for item in installations:
@@ -260,7 +299,9 @@ def main(
             for app_id in args.apps
         ):
             raise ValueError("Choose app IDs from scan or all; wildcards are not accepted.")
-        return remove_apps(args, backend if backend is not None else WindowsBackend(), on_preview)
+        return remove_apps(
+            args, backend if backend is not None else WindowsBackend(), on_preview, on_plan
+        )
     except (BackendError, ValueError, OSError) as error:
         print(paint(f"[ERROR] {error}", "error"), file=sys.stderr)
         print(

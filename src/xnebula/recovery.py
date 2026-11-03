@@ -28,6 +28,7 @@ def read_snapshot(path, kind, identity):
     document = json.loads(path.read_text(encoding="utf-8"))
     if (
         not isinstance(document, dict)
+        or type(document.get("schema")) is not int
         or document.get("schema") != 1
         or document.get("kind") != kind
         or document.get("identity") != identity
