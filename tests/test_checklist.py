@@ -10,16 +10,17 @@ from xnebula.checklist import read_key, render_frame, select_items
 class ChecklistTests(unittest.TestCase):
     rows = ["Photos", "Store", "Xbox"]
 
-    def choose(self, keys, rows=None):
+    def choose(self, keys, rows=None, selected=None):
         frames = []
 
-        def render(items, cursor, selected):
+        def render(items, cursor, selected, **state):
             frames.append((list(items), cursor, set(selected)))
 
         result = select_items(
             self.rows if rows is None else rows,
             read_key=Mock(side_effect=keys),
             render=render,
+            selected=selected,
         )
         return result, frames
 
@@ -28,7 +29,7 @@ class ChecklistTests(unittest.TestCase):
         self.assertEqual(result, [0, 2])
         self.assertEqual(frames[0], (self.rows, 0, set()))
         self.assertEqual(frames[-1][2], {0, 2})
-        self.assertEqual(self.choose(["space", "space", "enter"])[0], None)
+        self.assertEqual(self.choose(["space", "space", "enter", "escape"])[0], None)
 
     def test_navigation_wraps_at_both_ends(self):
         result, frames = self.choose(["up", "space", "down", "space", "enter"])
@@ -38,13 +39,70 @@ class ChecklistTests(unittest.TestCase):
 
     def test_select_all_can_select_and_clear_every_item(self):
         self.assertEqual(self.choose(["all", "enter"])[0], [0, 1, 2])
-        self.assertIsNone(self.choose(["all", "all", "enter"])[0])
+        self.assertIsNone(self.choose(["all", "all", "enter", "escape"])[0])
         self.assertEqual(self.choose(["space", "all", "enter"])[0], [0, 1, 2])
         self.assertEqual(self.choose(["all", "space", "enter"])[0], [1, 2])
 
-    def test_cancel_discards_selection_and_empty_enter_returns_none(self):
+    def test_cancel_discards_selection_and_empty_enter_keeps_picker_open(self):
         self.assertIsNone(self.choose(["space", "escape"])[0])
-        self.assertIsNone(self.choose(["enter"])[0])
+        self.assertEqual(self.choose(["enter", "space", "enter"])[0], [0])
+
+    def test_search_returns_original_indexes_and_preserves_hidden_selection(self):
+        result, frames = self.choose(["space", "/", "x", "enter", "space", "enter"])
+        self.assertEqual(result, [0, 2])
+        self.assertIn((["Xbox"], 0, set()), frames)
+
+    def test_unicode_search_is_case_insensitive_and_accepts_spaces_and_a(self):
+        result, frames = self.choose(
+            ["/", "Ф", "О", "Т", "О", " ", "A", "enter", "space", "enter"],
+            ["Фото A", "Music"],
+        )
+        self.assertEqual(result, [0])
+        self.assertEqual(frames[-1][0], ["Фото A"])
+
+    def test_backspace_updates_filter_and_escape_clears_without_cancelling(self):
+        result, frames = self.choose(
+            ["/", "x", "q", "backspace", "enter", "escape", "space", "enter"]
+        )
+        self.assertEqual(result, [0])
+        self.assertIn(([], 0, set()), frames)
+        self.assertEqual(frames[-1][0], self.rows)
+
+    def test_no_matches_navigation_and_select_all_do_not_change_selection(self):
+        self.assertEqual(
+            self.choose(
+                ["/", "z", "enter", "up", "down", "home", "end", "space", "all", "enter"],
+                selected=[1],
+            )[0],
+            [1],
+        )
+
+    def test_select_all_only_toggles_matches_and_keeps_hidden_selection(self):
+        self.assertEqual(self.choose(["/", "x", "enter", "all", "enter"], selected=[0])[0], [0, 2])
+        self.assertEqual(self.choose(["/", "x", "enter", "all", "enter"], selected=[0, 2])[0], [0])
+
+    def test_initial_selection_is_copied_and_invalid_indexes_are_rejected(self):
+        initial = [1]
+        self.assertEqual(self.choose(["space", "enter"], selected=initial)[0], [0, 1])
+        self.assertEqual(initial, [1])
+        for selected in ([-1], [3], ["1"], [True]):
+            with self.subTest(selected=selected), self.assertRaises(ValueError):
+                self.choose([], selected=selected)
+
+    def test_empty_enter_shows_selection_guidance(self):
+        renderer = Mock()
+        select_items(self.rows, read_key=Mock(side_effect=["enter", "escape"]), render=renderer)
+        self.assertIn("Space", renderer.call_args.kwargs["message"])
+        self.assertIn("Esc", renderer.call_args.kwargs["message"])
+
+    def test_escape_closes_empty_search_before_it_cancels_picker(self):
+        self.assertEqual(self.choose(["/", "escape", "space", "enter"])[0], [0])
+        self.assertIsNone(self.choose(["/", "escape", "escape"])[0])
+
+    def test_search_ignores_navigation_keys_and_backspace_on_empty_query(self):
+        result, frames = self.choose(["/", "up", "backspace", "down", "enter", "space", "enter"])
+        self.assertEqual(result, [0])
+        self.assertTrue(all(frame[0] == self.rows for frame in frames))
 
     def test_empty_list_does_not_read_keys_or_render(self):
         reader, renderer = Mock(), Mock()
@@ -77,9 +135,12 @@ class ChecklistKeyTests(unittest.TestCase):
 
     def test_common_keys_decode_without_waiting_for_enter(self):
         for key, expected in (
-            (" ", "space"),
-            ("a", "all"),
-            ("A", "all"),
+            (" ", " "),
+            ("a", "a"),
+            ("A", "A"),
+            ("/", "/"),
+            ("Ф", "Ф"),
+            ("\x08", "backspace"),
             ("\r", "enter"),
             ("\x1b", "escape"),
         ):
@@ -99,14 +160,39 @@ class ChecklistKeyTests(unittest.TestCase):
 
 
 class ChecklistRenderingTests(unittest.TestCase):
-    def frame(self, rows, cursor, selected, size):
+    def frame(self, rows, cursor, selected, size, **state):
         with (
             contextlib.redirect_stdout(io.StringIO()) as output,
             patch("xnebula.checklist.shutil.get_terminal_size", return_value=size),
             patch.dict(os.environ, {"NO_COLOR": "1"}),
         ):
-            render_frame(rows, cursor, selected)
+            render_frame(rows, cursor, selected, **state)
         return output.getvalue()
+
+    def test_search_displays_filter_visible_bulk_scope_and_total_selection(self):
+        output = self.frame(["Xbox"], 0, {0}, (80, 12), query="x", total=3, selection_count=2)
+        self.assertIn("Search: x", output)
+        self.assertIn("A:shown", output)
+        self.assertIn("2/3 selected | 1 matching", output)
+
+    def test_search_editing_and_no_matches_render_without_cursor_row(self):
+        output = self.frame([], 0, set(), (80, 12), query="missing", searching=True)
+        self.assertIn("Search: missing_", output)
+        self.assertIn("Enter:done Esc:clear", output)
+        self.assertIn("No matches", output)
+        self.assertIn("0/0", output)
+        self.assertNotIn("> [", output)
+
+    def test_search_frames_fit_narrow_and_tiny_terminal(self):
+        for height in range(1, 7):
+            for rows in ([], ["Фото A"]):
+                with self.subTest(height=height, rows=rows):
+                    output = self.frame(rows, 0, set(), (20, height), query="Фото A")
+                    lines = output.removeprefix("\x1b[H\x1b[J").splitlines()
+                    self.assertLessEqual(len(lines), max(1, height - 1))
+                    self.assertTrue(all(len(line) <= 19 for line in lines))
+                    if height >= 5:
+                        self.assertIn("A:shown", output)
 
     def test_viewport_keeps_current_row_visible_at_start_middle_and_end(self):
         rows = [f"App {number}" for number in range(20)]

@@ -1,11 +1,10 @@
 """Compact numbered interface for the app's Windows-only actions."""
 
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from xnebula import __version__
+from xnebula.backup_picker import choose_backup
 from xnebula.checklist import select_items
 from xnebula.console import enable_virtual_terminal, paint
 from xnebula.core import CATALOG
@@ -47,22 +46,32 @@ def parse_app_selection(raw, apps=CATALOG):
     return [apps[index].id for index in parse_numbers(raw, len(apps))]
 
 
-def choose_items(rows, prefix, title):
+def choose_items(rows, prefix, title, *, selected=None):
     print(paint("\n" + title, "title"))
     if not rows:
         print("Nothing available to change.")
         return None
+    previous = [index for index, row in enumerate(rows) if selected and row[0] in selected]
     if sys.stdin.isatty() and sys.stdout.isatty() and enable_virtual_terminal():
-        indexes = select_items([name for _, name, _ in rows])
+        options = {"selected": previous} if selected is not None else {}
+        indexes = select_items([name for _, name, _ in rows], **options)
+        if indexes:
+            print(paint("Selected: " + ", ".join(rows[index][1] for index in indexes), "title"))
         return [*prefix, *(rows[index][0] for index in indexes)] if indexes else None
     for number, (_, name, _) in enumerate(rows, start=1):
-        print(paint(f"{number:2}", "number") + f"  {name}")
+        marker = " [x]" if number - 1 in previous else ""
+        print(paint(f"{number:2}", "number") + f"  {name}{marker}")
     print(paint(f"{len(rows) + 1:2}", "number") + f"  Select All ({len(rows)} items)")
     print(" 0  Back")
     while True:
-        raw = input("Choose numbers (1,3-5), Select All, or Enter to go back: ")
+        prompt = (
+            "Choose replacement numbers (1,3-5), all, Enter to keep selection, or 0 to cancel: "
+            if previous
+            else "Choose numbers (1,3-5), Select All, or Enter to go back: "
+        )
+        raw = input(prompt)
         try:
-            indexes = parse_numbers(raw, len(rows))
+            indexes = previous if previous and not raw.strip() else parse_numbers(raw, len(rows))
         except ValueError:
             print(
                 paint(
@@ -76,38 +85,44 @@ def choose_items(rows, prefix, title):
         return [*prefix, *(rows[index][0] for index in indexes)]
 
 
-def choose_backup(directory):
-    rows = []
-    labels = {
-        "services": "Windows services",
-        "animations": "Windows animations",
-        None: "Privacy / registry settings",
-    }
-    for path in sorted(
-        directory.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True
-    ):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            kind = data.get("kind")
-            if data.get("schema") != 1 or kind not in labels:
-                continue
-            when = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
-            rows.append((path, f"{when}  {labels[kind]}"))
-        except OSError, ValueError, AttributeError:
-            continue
-    if not rows:
-        print("No settings backups found yet.")
-        return None
-    print(paint("Restore a backup (newest first)", "title"))
-    for number, (_, title) in enumerate(rows, start=1):
-        print(f"{number:2}  {title}")
-    while True:
-        raw = input("Backup number, or Enter to go back: ").strip()
-        if not raw or raw == "0":
-            return None
-        if raw.isascii() and raw.isdecimal() and 1 <= int(raw) <= len(rows):
-            return ["restore", str(rows[int(raw) - 1][0])]
-        print(paint("Choose one of the displayed backup numbers.", "warning"))
+def review_command(invoke, command, can_apply, picker=None):
+    while command:
+        if call(invoke, command) != 0:
+            print(paint("[FAILED] Preview failed. Check the details above.", "error"))
+            return
+        if not can_apply():
+            print("No changes to apply.")
+            return
+        while True:
+            edit_hint = "EDIT to change selection, " if picker else ""
+            confirmation = input(
+                paint(
+                    f"Preview only. Type APPLY to continue, {edit_hint}or Enter to go back: ",
+                    "warning",
+                )
+            ).strip()
+            if not confirmation:
+                print("[CANCELLED] No changes applied.")
+                return
+            if confirmation == "APPLY":
+                result = call(invoke, [*command, "--apply", "--yes"])
+                if result == 0:
+                    print(paint("[DONE] Operation completed. See the details above.", "success"))
+                else:
+                    print(
+                        paint(
+                            "[FAILED] Operation failed or partially completed. See details above.",
+                            "error",
+                        )
+                    )
+                return
+            if confirmation == "EDIT" and picker:
+                rows, prefix, title = picker
+                command = choose_items(rows, prefix, title, selected=command[len(prefix) :])
+                if not command:
+                    print("[CANCELLED] No changes applied.")
+                break
+            print(paint("Type APPLY exactly, or press Enter to cancel.", "warning"))
 
 
 def run_menu(
@@ -141,15 +156,17 @@ def run_menu(
             if choice == "0":
                 return 0
             try:
+                picker = None
                 if choice == "1":
+                    print("Scanning removable Windows apps...", flush=True)
                     apps = apps_provider() if apps_provider is not None else CATALOG
-                    command = choose_items(
+                    picker = (
                         [(app.id, app.title, app.impact) for app in apps],
                         ["remove"],
                         "Removable Windows apps (all accounts)",
                     )
                 elif choice == "2":
-                    command = choose_items(
+                    picker = (
                         [(service.name, service.title, service.effect) for service in SERVICES],
                         ["services", "disable"],
                         "Optional services",
@@ -165,21 +182,10 @@ def run_menu(
                 else:
                     print(paint("Choose a number from 0 to 6.", "warning"))
                     continue
-                if not command or call(invoke, command) != 0 or not can_apply():
-                    continue
-                while True:
-                    confirmation = input(
-                        paint(
-                            "Preview only. Type APPLY to continue, or Enter to go back: ",
-                            "warning",
-                        )
-                    ).strip()
-                    if not confirmation:
-                        break
-                    if confirmation == "APPLY":
-                        call(invoke, [*command, "--apply", "--yes"])
-                        break
-                    print(paint("Type APPLY exactly, or press Enter to cancel.", "warning"))
+                if picker:
+                    command = choose_items(*picker)
+                if command:
+                    review_command(invoke, command, can_apply, picker)
             except (BackendError, OSError, ValueError) as error:
                 print(paint(f"[ERROR] {error}", "error"))
     except EOFError, KeyboardInterrupt:

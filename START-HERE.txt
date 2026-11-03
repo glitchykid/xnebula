@@ -13,7 +13,11 @@ Windows PowerShell keeps your console theme and displays colored messages.
 
 In app/service checklists, use Up/Down to move and Space to toggle a checkbox.
 A selects or clears all. Enter confirms; Esc goes back. Lists show names only.
-Review the action preview, then type APPLY to proceed.
+Press / to search, type a name, then Enter to navigate the matches.
+A selects/clears matching rows; checked items outside the filter stay selected.
+Esc clears the filter first; press Esc again to go back.
+Review the action preview, then type APPLY to proceed or EDIT to revise choices.
+In the numbered editor, Enter keeps previous choices; new numbers replace them.
 Redirected input uses numbers, ranges (1,3-5), all, and 0 to cancel. Opening the app makes no system changes.
 
 All-app removal includes detected removable Microsoft packages such as Store,
@@ -30,6 +34,7 @@ installation files. WebView2 and browser profiles are excluded. Reinstall Edge
 to recover it; force deletion can leave a registration entry or be undone by updates.
 
 Backups are in .xnebula\logs. Restore them by number in menu option 6.
+Rows show local time, type and filename; unreadable files are counted and skipped.
 Backups restore settings/services, not removed apps, files, or Recall snapshots.
 
 PowerShell commands also work:

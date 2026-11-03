@@ -2,6 +2,7 @@
 
 1. Read each preview and its feature effects. Enter returns to the menu; applying requires `APPLY`.
 2. Keep the backup path printed before settings/service/animation changes. Menu option **6** lists backups automatically, newest-first.
+   Rows show local time to seconds, backup type and filename. Recorded creation times with timezones take priority over file modification times. Invalid/unreadable files are counted and skipped; selection still runs a full restore preview before applying.
 3. Restore overlapping changes newest-first. The app skips already-restored values and refuses conflicting later edits. Restoring creates a new backup for the recovery operation.
 4. Service backups preserve startup mode, delayed automatic startup, and running/stopped state. Restore order reverses the disabling order so dependencies can come back first.
 5. Animation backups capture all supported preference flags plus the old taskbar value, including an absent value. Restoration refuses later conflicting edits to individual effects as well as the taskbar, before changing anything. Restoration changes the account running the app; sign out if taskbar behavior has not refreshed.

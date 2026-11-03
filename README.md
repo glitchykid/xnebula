@@ -11,11 +11,21 @@ A focused Windows 11 debloating app that runs in **Windows PowerShell**. The com
 
 Every change previews first. Type `APPLY` to proceed or press Enter to return. App and service lists use a checklist: **Up/Down** moves the cursor, **Space** toggles an item, **A** selects or clears all, **Enter** confirms, and **Esc** goes back. Only names are shown. Long lists scroll with the cursor. With redirected input, a numbered fallback accepts numbers, ranges, and `all`.
 
+### Find, review, and correct your selection
+
+Press **/** in an app or service checklist to search names, then type a filter. Search ignores case and supports Unicode. **Backspace** edits the filter; **Enter** finishes typing so you can navigate matches. **A** selects or clears only the matching rows while a filter is active. Previously checked items outside the filter stay checked, and the counter shows the total selection. **Esc** clears the search first; press it again to cancel. Enter with nothing selected keeps the checklist open and explains how to select or cancel.
+
+At an app/service preview, type **EDIT** to return to the list with your checkmarks intact. The revised selection gets a new preview before APPLY. In the numbered fallback, editing displays previous choices with `[x]`: Enter keeps them, new numbers replace them, and `0` cancels. The menu announces app scanning and reports completion, failure, cancellation, or no changes to apply. Detailed errors and backup/log paths remain in the output.
+
+![Searchable checklist with matching rows and total selection count](docs/previews/checklist-search.png)
+
+This preview renders the terminal output with sample data; the running app retains your console theme.
+
 Mistyping `APPLY` in the menu keeps your selection and asks again. Terminals without cursor controls, including `TERM=dumb`, use the numbered selector; `TERM=dumb` also disables color codes.
 
 ## Download and start
 
-1. Download [xnebula-0.3.2-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.2/xnebula-0.3.2-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+1. Download [xnebula-0.4.0-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.4.0/xnebula-0.4.0-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
 2. Extract the **entire ZIP** into a writable folder, such as Documents.
 3. Open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. `Start-XNebula.cmd` opens without elevation, but system-wide inventory and changes require administrator rights.
 
@@ -86,6 +96,8 @@ WebView2, Edge Update, third-party browsers, and browser profile data are outsid
 
 Automatic backups and JSONL action logs live in `.xnebula/logs` inside the extracted app folder, regardless of where the launcher was called. Menu option **6** lists backups by date and kind, so restoration needs no typed file path. Settings restore rejects conflicting later edits and skips already-restored values. Service restore restores prior configuration; animation restore restores captured preferences. Original registry backups from older releases remain accepted for known targets.
 
+Backup rows include local time to the second and the filename to distinguish similar entries. The picker uses the recorded creation time when it includes a timezone, falling back to file modification time for legacy or invalid timestamps. Invalid or unreadable files are counted and skipped while readable backups remain available. Selecting a file still requires a successful restore preview; listing it does not validate its full recovery contents.
+
 ```powershell
 .\Start-XNebula-Admin.cmd restore '.xnebula\logs\settings-EXAMPLE.json'
 .\Start-XNebula-Admin.cmd restore '.xnebula\logs\settings-EXAMPLE.json' --apply
@@ -139,4 +151,4 @@ START-HERE.txt     portable quick start
 pyproject.toml     package, tooling, and coverage configuration
 ```
 
-See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.2 release notes](docs/releases/v0.3.2.md). `AGENTS.md` remains unchanged.
+See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.4.0 release notes](docs/releases/v0.4.0.md). `AGENTS.md` remains unchanged.

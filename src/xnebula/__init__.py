@@ -1,3 +1,3 @@
 """XNebula: explicit, preview-first Windows app removal."""
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"

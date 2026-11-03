@@ -41,6 +41,7 @@ class PortableTests(unittest.TestCase):
             self.assertIn("XNebula/Start-XNebula-Admin.cmd", names)
             self.assertIn("XNebula/.runtime/LICENSE.txt", names)
             self.assertIn("XNebula/src/xnebula/menu.py", names)
+            self.assertIn("XNebula/docs/previews/checklist-search.png", names)
             self.assertIn(b"../src", archive.read("XNebula/.runtime/python315._pth"))
             self.assertFalse(
                 any(

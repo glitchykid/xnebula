@@ -53,6 +53,7 @@ def build(root: Path, runtime: Path, output: Path) -> Path:
                 ]
                 files += sorted((root / "src/xnebula").glob("*.py"))
                 files += sorted((root / "docs").rglob("*.md"))
+                files += sorted((root / "docs/previews").glob("*.png"))
                 for file in files:
                     bundle.write(file, "XNebula/" + file.relative_to(root).as_posix())
             os.replace(staging, destination)

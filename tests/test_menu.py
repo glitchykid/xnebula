@@ -112,6 +112,100 @@ class MenuTests(unittest.TestCase):
         self.run_menu(["5", "0"], invoke)
         invoke.assert_called_once_with(["edge", "remove"])
 
+    def test_edit_reopens_terminal_picker_with_previous_selection_and_previews_again(self):
+        for choice, prefix, first, second in (
+            ("1", ["remove"], "news", "weather"),
+            ("2", ["services", "disable"], "DiagTrack", "dmwappushservice"),
+        ):
+            output = io.StringIO()
+            invoke = Mock(return_value=0)
+            with (
+                self.subTest(choice=choice),
+                contextlib.redirect_stdout(output),
+                patch("xnebula.menu.sys.stdin.isatty", return_value=True),
+                patch("xnebula.menu.sys.stdout.isatty", return_value=True),
+                patch("xnebula.menu.enable_virtual_terminal", return_value=True),
+                patch("xnebula.menu.select_items", side_effect=[[0], [1]]) as picker,
+                patch("builtins.input", side_effect=[choice, "EDIT", "APPLY", "0"]),
+            ):
+                self.assertEqual(run_menu(invoke), 0)
+                self.assertEqual(picker.call_args_list[1].kwargs, {"selected": [0]})
+                self.assertEqual(
+                    [call.args[0] for call in invoke.call_args_list],
+                    [[*prefix, first], [*prefix, second], [*prefix, second, "--apply", "--yes"]],
+                )
+                self.assertIn("Selected: ", output.getvalue())
+
+    def test_numbered_edit_shows_previous_selection_and_enter_keeps_it(self):
+        _, output, invoke = self.run_menu(["1", "1", "EDIT", "", "APPLY", "0"])
+        self.assertIn("[x]", output)
+        self.assertEqual(
+            [call.args[0] for call in invoke.call_args_list],
+            [["remove", "news"], ["remove", "news"], ["remove", "news", "--apply", "--yes"]],
+        )
+
+    def test_cancelling_edited_selection_never_applies(self):
+        _, output, invoke = self.run_menu(["1", "1", "EDIT", "0", "0"])
+        invoke.assert_called_once_with(["remove", "news"])
+        self.assertIn("[CANCELLED]", output)
+
+    def test_numbered_edit_replaces_selection_before_applying(self):
+        _, _, invoke = self.run_menu(["1", "1", "EDIT", "2", "APPLY", "0"])
+        self.assertEqual(
+            [call.args[0] for call in invoke.call_args_list],
+            [["remove", "news"], ["remove", "weather"], ["remove", "weather", "--apply", "--yes"]],
+        )
+
+    def test_failed_edited_preview_never_applies(self):
+        invoke = Mock(side_effect=[0, 1])
+        _, output, _ = self.run_menu(["1", "1", "EDIT", "2", "0"], invoke)
+        self.assertEqual(invoke.call_count, 2)
+        self.assertIn("[FAILED] Preview failed.", output)
+        self.assertNotIn("[DONE]", output)
+
+    def test_edited_preview_with_no_pending_changes_never_offers_apply(self):
+        _, output, invoke = self.run_menu(
+            ["1", "1", "EDIT", "2", "0"], can_apply=Mock(side_effect=[True, False])
+        )
+        self.assertEqual(invoke.call_count, 2)
+        self.assertIn("No changes to apply.", output)
+        self.assertNotIn("[DONE]", output)
+
+    def test_cancelling_preview_explicitly_reports_no_changes(self):
+        _, output, invoke = self.run_menu(["3", "", "0"])
+        invoke.assert_called_once_with(["privacy", "set", "all"])
+        self.assertIn("[CANCELLED] No changes applied.", output)
+
+    def test_edit_is_not_accepted_for_actions_without_a_picker(self):
+        _, output, invoke = self.run_menu(["3", "EDIT", "", "0"])
+        invoke.assert_called_once_with(["privacy", "set", "all"])
+        self.assertIn("[CANCELLED]", output)
+
+    def test_operation_result_distinguishes_success_and_partial_failure(self):
+        for status, expected in ((0, "[DONE]"), (1, "[FAILED]")):
+            with self.subTest(status=status):
+                invoke = Mock(side_effect=[0, status])
+                _, output, _ = self.run_menu(["3", "APPLY", "0"], invoke)
+                self.assertIn(expected, output)
+                self.assertNotIn("[CANCELLED]", output)
+                if status:
+                    self.assertNotIn("[DONE]", output)
+
+    def test_preview_with_no_changes_never_claims_applied_success(self):
+        _, output, invoke = self.run_menu(["3", "0"], can_apply=lambda: False)
+        invoke.assert_called_once_with(["privacy", "set", "all"])
+        self.assertIn("No changes to apply.", output)
+        self.assertNotIn("[DONE]", output)
+
+    def test_scan_progress_is_printed_before_inventory(self):
+        def inventory():
+            self.assertIn("Scanning removable Windows apps...", capture.getvalue())
+            return []
+
+        capture = io.StringIO()
+        with contextlib.redirect_stdout(capture), patch("builtins.input", side_effect=["1", "0"]):
+            self.assertEqual(run_menu(Mock(), apps_provider=inventory), 0)
+
     def test_confirmation_typo_keeps_preview_and_requires_exact_apply(self):
         _, output, invoke = self.run_menu(["3", "apply", "APPL", " APPLY ", "0"])
         self.assertEqual(
