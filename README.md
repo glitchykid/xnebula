@@ -1,6 +1,6 @@
 # XNebula
 
-A focused Windows 11 debloating app that runs in **Windows PowerShell with a black background**. The compact, colored terminal menu provides six actions:
+A focused Windows 11 debloating app that runs in **Windows PowerShell**. The compact, colored terminal menu provides six actions:
 
 1. Remove Windows apps.
 2. Disable optional services.
@@ -9,23 +9,25 @@ A focused Windows 11 debloating app that runs in **Windows PowerShell with a bla
 5. Force uninstall/delete Microsoft Edge.
 6. Restore a settings backup.
 
-Every change previews first. Type `APPLY` to proceed or press Enter to return. Number lists accept `1 3 5`, `1,3,5`, ranges such as `2-4`, and **Select All**. `0` exits or cancels selection.
+Every change previews first. Type `APPLY` to proceed or press Enter to return. App and service lists use a checklist: **Up/Down** moves the cursor, **Space** toggles an item, **A** selects or clears all, **Enter** confirms, and **Esc** goes back. Only names are shown. Long lists scroll with the cursor. With redirected input, a numbered fallback accepts numbers, ranges, and `all`.
 
 ## Download and start
 
-1. Download [xnebula-0.3.0-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.0/xnebula-0.3.0-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
+1. Download [xnebula-0.3.1-windows-x64.zip](https://github.com/glitchykid/xnebula/releases/download/v0.3.1/xnebula-0.3.1-windows-x64.zip) from the [release page](https://github.com/glitchykid/xnebula/releases/latest).
 2. Extract the **entire ZIP** into a writable folder, such as Documents.
 3. Open `Start-XNebula-Admin.cmd` and accept the Windows administrator prompt. `Start-XNebula.cmd` opens without elevation, but system-wide inventory and changes require administrator rights.
 
 Python 3.15.2 is included. No separate Python installation, pip, Git, or network connection is required to run the portable app. Keep `.runtime`, `src`, and `scripts` alongside the launchers. The bundled release targets **Windows 11 x64, build 22000 or newer**. Windows 10/Server are outside the supported target; ARM64 developers can use the source installation with native Python.
 
-Both launchers explicitly use built-in **Windows PowerShell 5.1**. They set the current console background to black with gray text, cyan menus, yellow previews, green successes, and red failures. Color output falls back to plain text when redirected or when `NO_COLOR` is present. Saved PowerShell profiles and system-wide console preferences are not edited. Launchers use a process-only execution-policy setting; organization-enforced script restrictions may still block them.
+Both launchers explicitly use built-in **Windows PowerShell 5.1**. They preserve your console theme. Menus use cyan, previews yellow, successes green, and failures red. Color output falls back to plain text when redirected or when `NO_COLOR` is present. Saved PowerShell profiles and system-wide console preferences are not edited. Launchers use a process-only execution-policy setting; organization-enforced script restrictions may still block them.
 
 ## Windows app removal
 
-The app discovers removable Microsoft Appx/MSIX packages installed for existing accounts or provisioned for new accounts. This includes packages beyond the previous eight-app catalog: Photos, Store, App Installer/winget, Xbox, Teams, Copilot, Widgets, Outlook, Notepad, Paint, and others, depending on the machine. The numbered picker shows detected apps and a dynamic **Select All** option.
+The app discovers removable Microsoft Appx/MSIX packages installed for existing accounts or provisioned for new accounts. This includes packages beyond the previous eight-app catalog: Photos, Store, App Installer/winget, Xbox, Teams, Copilot, Widgets, Outlook, Notepad, Paint, and others, depending on the machine. The keyboard checklist shows detected app names, with **A** to select or clear all.
 
 Removal closes processes inside the selected app's installation directory and invokes Windows' package removal commands for all accounts and future-account provisioning. Frameworks, runtimes, Windows Security, the terminal host, protected SystemApps, and components required for sign-in/shell operation are excluded. Third-party desktop programs are outside this removal scope. Classic desktop software is not enumerated as Appx; Edge has a separate explicit action.
+
+Optional media packages, including HEVC, HEIF, AV1, VP9, MPEG-2, Web Media, WebP, and Raw Image extensions, appear by readable names when installed and removable. Select them with Space or include them with A. These are codecs/format extensions, rather than inherently harmful software: removal can affect playback, image viewing, or thumbnails in applications using Windows codecs. See Microsoft's [codec documentation](https://support.microsoft.com/en-us/windows/apps/windowsmediaplayer/codecs-faq).
 
 Save work before applying: force-closing selected apps can lose unsaved data. Removed app data and package installation media are **not** backed up. Selecting Store or App Installer can make later reinstallations harder; original signed packages, dependencies, licenses, or Windows installation media may be needed. A failed package is reported while the app attempts remaining removals, and the command returns failure if any removal failed.
 
@@ -41,7 +43,7 @@ Save work before applying: force-closing selected apps can lose unsaved data. Re
 
 Services are **stopped and disabled**, preserving their registration so recovery remains possible. The optional list covers diagnostic telemetry, WAP push routing, error reporting, Remote Registry, retail demo, maps, location, Xbox services, media sharing, fax, search indexing, and printing.
 
-Each item explains its effect. Selecting all can disable printing/Print to PDF, Xbox sign-in/cloud saves/multiplayer, location, and media sharing, and make searches slower. These features may be useful on your PC; select only what you want disabled. Defender, Firewall, Windows Update, networking, sign-in, and other core services are not targets.
+The checklist shows service names; the action preview explains effects. Selecting all can disable printing/Print to PDF, Xbox sign-in/cloud saves/multiplayer, location, and media sharing, and make searches slower. These features may be useful on your PC; select only what you want disabled. Defender, Firewall, Windows Update, networking, sign-in, and other core services are not targets.
 
 The app skips services required by running dependents outside the selected optional set. Selected dependents are stopped before their parent service; native operations recheck dependencies and do not force-stop unrelated services. Backups preserve startup mode, delayed automatic startup, and running/stopped state.
 
@@ -97,7 +99,7 @@ Exit codes: `0` preview/completed/cancelled, `1` failure (including partial app 
 
 ## Development and checks
 
-Use full **Python 3.15.2** (latest stable verified 2026-10-27) with pip/venv for development. The embedded runtime is for running the app. There are no application runtime dependencies.
+Use full **Python 3.15.2** (latest stable verified 2026-11-03) with pip/venv for development. The embedded runtime is for running the app. There are no application runtime dependencies.
 
 ```powershell
 git clone https://github.com/glitchykid/xnebula.git
@@ -135,4 +137,4 @@ START-HERE.txt     portable quick start
 pyproject.toml     package, tooling, and coverage configuration
 ```
 
-See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.0 release notes](docs/releases/v0.3.0.md). `AGENTS.md` remains unchanged.
+See the [wiki](docs/wiki/Home.md), [policy details](docs/wiki/Policies.md), and [v0.3.1 release notes](docs/releases/v0.3.1.md). `AGENTS.md` remains unchanged.

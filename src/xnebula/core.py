@@ -91,6 +91,14 @@ def removable_name(name):
 def available_apps(packages):
     known = {app.name: app for app in CATALOG}
     titles = {
+        "Microsoft.HEVCVideoExtension": "HEVC Video Extensions",
+        "Microsoft.HEIFImageExtension": "HEIF Image Extensions",
+        "Microsoft.AV1VideoExtension": "AV1 Video Extension",
+        "Microsoft.VP9VideoExtensions": "VP9 Video Extensions",
+        "Microsoft.WebMediaExtensions": "Web Media Extensions",
+        "Microsoft.WebpImageExtension": "WebP Image Extensions",
+        "Microsoft.MPEG2VideoExtension": "MPEG-2 Video Extension",
+        "Microsoft.RawImageExtension": "Raw Image Extension",
         "Microsoft.Windows.Photos": "Photos",
         "Microsoft.WindowsStore": "Microsoft Store",
         "Microsoft.StorePurchaseApp": "Store purchases",

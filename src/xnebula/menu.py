@@ -1,10 +1,12 @@
 """Compact numbered interface for the app's Windows-only actions."""
 
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
 from xnebula import __version__
+from xnebula.checklist import select_items
 from xnebula.console import paint
 from xnebula.core import CATALOG
 from xnebula.services import SERVICES
@@ -50,8 +52,11 @@ def choose_items(rows, prefix, title):
     if not rows:
         print("Nothing available to change.")
         return None
-    for number, (_, name, effect) in enumerate(rows, start=1):
-        print(paint(f"{number:2}", "number") + f"  {name} - {effect}")
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        indexes = select_items([name for _, name, _ in rows])
+        return [*prefix, *(rows[index][0] for index in indexes)] if indexes else None
+    for number, (_, name, _) in enumerate(rows, start=1):
+        print(paint(f"{number:2}", "number") + f"  {name}")
     print(paint(f"{len(rows) + 1:2}", "number") + f"  Select All ({len(rows)} items)")
     print(" 0  Back")
     while True:
@@ -147,7 +152,7 @@ def run_menu(
                     command = choose_items(
                         [(service.name, service.title, service.effect) for service in SERVICES],
                         ["services", "disable"],
-                        "Optional services - read the effects before Select All",
+                        "Optional services",
                     )
                 elif choice in ("3", "4", "5"):
                     command = {

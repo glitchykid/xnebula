@@ -17,6 +17,12 @@ PALETTE = {
 def color_enabled():
     if "NO_COLOR" in os.environ or not sys.stdout.isatty():
         return False
+    return enable_virtual_terminal()
+
+
+def enable_virtual_terminal():
+    if not sys.stdout.isatty():
+        return False
     if sys.platform != "win32":
         return True
     kernel = ctypes.windll.kernel32

@@ -8,10 +8,32 @@ from unittest.mock import Mock, patch
 
 from xnebula.cli import main
 from xnebula.core import CATALOG, Package
-from xnebula.menu import parse_app_selection, run_menu
+from xnebula.menu import choose_items, parse_app_selection, run_menu
 
 
 class MenuTests(unittest.TestCase):
+    def test_terminal_picker_uses_checkboxes_without_descriptions(self):
+        with (
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            patch("xnebula.menu.sys.stdin.isatty", return_value=True),
+            patch("xnebula.menu.sys.stdout.isatty", return_value=True),
+            patch("xnebula.menu.select_items", return_value=[1]) as select,
+        ):
+            command = choose_items(
+                [("one", "First", "Long description"), ("two", "Second", "Other effect")],
+                ["remove"],
+                "Apps",
+            )
+        select.assert_called_once_with(["First", "Second"])
+        self.assertEqual(command, ["remove", "two"])
+        self.assertNotIn("Long description", output.getvalue())
+
+    def test_launcher_does_not_override_console_theme(self):
+        script = (Path(__file__).resolve().parents[1] / "scripts/launch.ps1").read_text()
+        self.assertNotIn("BackgroundColor", script)
+        self.assertNotIn("ForegroundColor", script)
+        self.assertNotIn("[Console]::Clear", script)
+
     def run_menu(self, answers, invoke=None, **kwargs):
         invoke = invoke or Mock(return_value=0)
         output = io.StringIO()

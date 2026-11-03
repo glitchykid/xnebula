@@ -4,6 +4,25 @@ from xnebula.core import Package, available_apps, build_plan
 
 
 class ExpandedAppsTests(unittest.TestCase):
+    def test_optional_media_extensions_have_clear_names_and_can_be_removed(self):
+        names = {
+            "Microsoft.HEVCVideoExtension": "HEVC Video Extensions",
+            "Microsoft.HEIFImageExtension": "HEIF Image Extensions",
+            "Microsoft.AV1VideoExtension": "AV1 Video Extension",
+            "Microsoft.VP9VideoExtensions": "VP9 Video Extensions",
+            "Microsoft.WebMediaExtensions": "Web Media Extensions",
+            "Microsoft.WebpImageExtension": "WebP Image Extensions",
+            "Microsoft.MPEG2VideoExtension": "MPEG-2 Video Extension",
+            "Microsoft.RawImageExtension": "Raw Image Extension",
+        }
+        packages = [Package(name, name + "_1", "installed") for name in names]
+        self.assertEqual({app.name: app.title for app in available_apps(packages)}, names)
+        self.assertEqual({p.name for p in build_plan(["all"], packages)}, set(names))
+        self.assertEqual(
+            [p.name for p in build_plan(["Microsoft.HEVCVideoExtension"], packages)],
+            ["Microsoft.HEVCVideoExtension"],
+        )
+
     def test_all_discovers_windows_apps_beyond_the_old_catalog(self):
         packages = [
             Package("Microsoft.Windows.Photos", "photos_1", "installed"),

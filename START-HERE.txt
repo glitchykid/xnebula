@@ -4,16 +4,17 @@ Extract the entire ZIP. Open Start-XNebula-Admin.cmd and accept Windows'
 administrator prompt. Python is included; no installation or network is needed.
 Keep .runtime, src, and scripts with the launchers.
 
-Windows PowerShell opens with a black background and colored messages.
+Windows PowerShell keeps your console theme and displays colored messages.
 
 1  Remove Windows apps       2  Disable optional services
 3  Apply privacy settings    4  Disable Windows animations
 5  Force uninstall Edge      6  Restore a backup
 0  Exit
 
-Choose numbers, commas, or ranges in selection lists (1,3-5). Select All
-chooses every displayed item. Review effects, then type APPLY to proceed.
-Enter or 0 cancels selection. Opening the app makes no system changes.
+In app/service checklists, use Up/Down to move and Space to toggle a checkbox.
+A selects or clears all. Enter confirms; Esc goes back. Lists show names only.
+Review the action preview, then type APPLY to proceed.
+Redirected input uses numbers, ranges (1,3-5), all, and 0 to cancel. Opening the app makes no system changes.
 
 All-app removal includes detected removable Microsoft packages such as Store,
 Photos, Xbox, and Copilot. Core Windows components and third-party programs
